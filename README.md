@@ -4,7 +4,9 @@ A first-person tree-skiing game that runs in the browser. Ski 5,000 m down a fog
 
 ## Play
 
-Download `index.html` and open it in a modern browser (Chrome, Safari, Edge or Firefox). It needs an internet connection the first time to load three.js and the font.
+**Play in your browser: https://goohaoyu.github.io/pov-ski/**
+
+Works on phones and computers in any modern browser (Chrome, Safari, Edge or Firefox).
 
 ## Controls
 

@@ -1621,8 +1621,8 @@ function endReplay(){           // skip straight to the end screen
 $('watch').addEventListener('click', () => startReplay(0));
 
 /* ---------- share a clip: the last 30 seconds re-rendered into a video, with the link burned in ---------- */
-const GAME_URL = 'https://github.com/goohaoyu/pov-ski';
-const GAME_URL_SHORT = GAME_URL.replace(/^https?:\/\//, '');
+const GAME_URL = 'https://goohaoyu.github.io/pov-ski/';
+const GAME_URL_SHORT = GAME_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
 let clip = null, clipFile = null, clipURL = null;
 function pickMime(){
   if (!window.MediaRecorder) return null;
