@@ -127,6 +127,23 @@ kbd{font:inherit;font-weight:600;border:1.5px solid var(--ink);border-radius:4px
 #runmap[hidden]{display:none}
 #pick{margin:0 0 .45rem;font-size:1.05rem;font-weight:600;color:var(--ink-soft)}
 .outfits{display:flex;gap:.5rem;margin:0 0 1.2rem;flex-wrap:wrap}
+.actions{display:flex;flex-wrap:wrap;gap:.5rem}
+.actions #watch,.actions #share{margin-left:0}
+/* end screen: everything centred */
+#panel.end{align-items:center;
+  background:linear-gradient(to top,var(--veil) 0%,rgba(200,210,217,.82) 45%,rgba(200,210,217,.6) 100%)}
+#panel.end .inner{margin:auto;max-width:40rem;text-align:center;display:flex;flex-direction:column;align-items:center}
+#panel.end #ptitle{font-size:clamp(2.8rem,9vw,5.5rem);line-height:.92}
+#panel.end .actions button{min-width:11rem;margin:0}
+@media (max-width:480px){
+  #panel.end{padding-left:12px;padding-right:12px}
+  #panel.end #pbody{font-size:1.15rem}
+  #panel.end .outfits{gap:.35rem;flex-wrap:nowrap}
+  #panel.end .outfit{min-width:0;flex:1 1 0;padding:.25rem .3rem .35rem}
+  #panel.end .actions button{min-width:9.5rem}
+}
+#panel.end #pbody{margin-left:auto;margin-right:auto}
+#panel.end .outfits,#panel.end .actions{justify-content:center}
 .outfit{display:flex;flex-direction:column;align-items:center;gap:.2rem;min-width:4.7rem;padding:.3rem .5rem .45rem;
   border:2px solid rgba(28,37,48,.18);border-radius:6px;background:rgba(238,243,246,.75);font:inherit;color:var(--ink);cursor:pointer;text-align:left}
 .outfit[aria-pressed="true"]{border-color:var(--ink);background:var(--snow)}
@@ -198,7 +215,7 @@ kbd{font:inherit;font-weight:600;border:1.5px solid var(--ink);border-radius:4px
     </dl>
     <p id="pick">Choose your skier</p>
     <div class="outfits" id="outfits" role="group" aria-label="Choose your skier"></div>
-    <button id="go">Start run</button><button id="watch" type="button" hidden>Watch replay</button><button id="share" type="button" hidden>Share clip</button>
+    <div class="actions"><button id="go">Start run</button><button id="watch" type="button" hidden>Watch replay</button><button id="share" type="button" hidden>Share clip</button></div>
     <p id="phint" class="desk">or press Space</p>
   </div>
 </section>
@@ -1530,6 +1547,7 @@ function crash(kind){
 }
 let lastRun = null;
 function showEndPanel(){
+  $('panel').classList.add('end');
   const {kind, dist, top, isBest, score, ringsGot, time} = lastRun;
   const mmss = Math.floor(time/60) + ':' + String(Math.floor(time % 60)).padStart(2, '0');
   const ringTxt = ringsGot === 1 ? '1 ring collected' : ringsGot + ' rings collected';
@@ -1627,7 +1645,7 @@ function endReplay(){           // skip straight to the end screen
 $('watch').addEventListener('click', () => startReplay(0));
 
 /* ---------- share a clip: the last 10 seconds re-rendered into a video, with the link burned in ---------- */
-const GAME_URL = 'https://goohaoyu.github.io/pov-ski/';
+const GAME_URL = 'https://gu-project.com/pov-ski';
 const GAME_URL_SHORT = GAME_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
 let clip = null, clipFile = null, clipURL = null;
 function pickMime(){
