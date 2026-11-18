@@ -1,4 +1,4 @@
-# POV Ski (Treeline)
+# POV Ski
 
 A first-person tree-skiing game that runs in the browser. Ski 5,000 m down a foggy, low-poly mountain, thread the trees, fly through rings, and outrun the avalanche.
 
@@ -25,4 +25,4 @@ Works on phones and computers in any modern browser (Chrome, Safari, Edge or Fir
 - **Avalanche:** it releases 3 seconds after you drop in at 60 km/h and speeds up by 10 km/h every 1,000 m.
 - **Fog and forest:** both get thicker the further down you go.
 
-After a run you can watch a replay, see a map of your line, and share a clip of your last 30 seconds.
+After a run you can watch a replay, see a map of your line, and share a clip of your last 10 seconds.

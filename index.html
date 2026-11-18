@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Treeline: tree skiing prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>POV Ski</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
@@ -23,7 +23,8 @@ html,body{height:100%;margin:0;overflow:hidden}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{background:var(--fog);color:var(--ink);font-family:"Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;
   -webkit-user-select:none;user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
-#c{position:fixed;inset:0;width:100%;height:100%;display:block}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#tl,#tr,#tj,#hud{touch-action:none}
 
 #hud{position:fixed;inset:0;pointer-events:none;z-index:2}
 #hud[hidden]{display:none}
@@ -35,11 +36,11 @@ body{background:var(--fog);color:var(--ink);font-family:"Barlow Condensed","Aria
 #mute{pointer-events:auto;margin-top:.4rem;font:500 1rem "Barlow Condensed",sans-serif;color:var(--ink);
   background:rgba(238,243,246,.6);border:1.5px solid rgba(28,37,48,.3);border-radius:3px;padding:.15em .6em;cursor:pointer}
 #mute:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
-#look{position:absolute;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px + 176px + 8px);width:132px;height:96px;
+#look{position:absolute;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);width:132px;height:96px;
   border-radius:4px;border:1.5px solid rgba(28,37,48,.35);box-shadow:0 0 0 1px rgba(238,243,246,.5)}
 #hud.replay #rear,#hud.replay #look,#hud.replay #map{display:none}
 body.replaying #touch{display:none}   /* no jump button or steering zones while watching a replay */
-#hud.replay #look{bottom:calc(env(safe-area-inset-bottom,0px) + 16px + 176px + 8px + min(200px,30vh) + 8px)}
+body:has(#panel:not([hidden])) #touch{display:none}   /* or behind the start and end screens */
 #rtag{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 14px);transform:translateX(-50%);display:flex;align-items:center;gap:.6rem}
 #rtag[hidden]{display:none}
 #rtag b{font-weight:700;font-size:1.5rem;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 0 12px rgba(238,243,246,.9)}
@@ -48,7 +49,7 @@ body.replaying #touch{display:none}   /* no jump button or steering zones while 
 #look[hidden]{display:none}
 #rear{display:none !important;position:absolute;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px + 176px + 8px);width:132px;height:96px;
   border-radius:4px;border:1.5px solid rgba(28,37,48,.35);box-shadow:0 0 0 1px rgba(238,243,246,.5)}
-#map{position:absolute;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);width:132px;height:176px;
+#map{display:none !important;position:absolute;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);width:132px;height:176px;
   border-radius:10px;background:rgba(238,243,246,.62);border:1.5px solid rgba(28,37,48,.25)}
 
 #pops{position:fixed;left:50%;top:26%;transform:translateX(-50%);pointer-events:none;z-index:3;display:flex;flex-direction:column;align-items:center;gap:.2rem}
@@ -185,7 +186,7 @@ kbd{font:inherit;font-weight:600;border:1.5px solid var(--ink);border-radius:4px
 
 <section id="panel">
   <div class="inner">
-    <h1 id="ptitle">Treeline</h1>
+    <h1 id="ptitle">POV Ski</h1>
     <canvas id="runmap" hidden aria-label="Map of your run"></canvas>
     <p id="pbody">Ski 5,000 m through the trees in thick fog. You start with 200 health: brushing branches costs 5, clipping a trunk with your ski tips costs 200, and hitting a trunk ends the run. Fly through rings to heal, up to 1,000.</p>
     <dl class="keys" id="keys">
@@ -398,7 +399,7 @@ function rebuildFaces(){
 }
 
 /* ---------- trees (instanced low-poly spruces, slimmer than v1) ---------- */
-const MAXT = 900;
+const MAXT = 1800;
 function part(geo, mat, max){
   const m = new THREE.InstancedMesh(geo, mat, max);
   m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -467,7 +468,7 @@ const rockParts = [
 ];
 const pillowPart = part(lumpy(new THREE.IcosahedronGeometry(1, 1), 0.18), M(0xf6f9fb), MAXP);
 
-const TC = 7, RC = 13, PC = 9, RGC = 26;
+const TC = 5, RC = 13, PC = 9, RGC = 26;
 /* Rings: ground rings stand on the snow; air rings float where only a jump gets you through
    (free-floating, just past boulders, and out past cliff lips). */
 const RING_PTS = {ground: 25, air: 100};
@@ -489,11 +490,11 @@ function ringAt(ci, cj){
   if (z < 60 || z > FINISH - 40) return null;
   const r = hash(ci-8000, cj-8000), yaw = (hash(ci+81, cj-81) - 0.5)*0.6;
   if (r < 0.11){
-    if (nearCliff(x, z, 6) || treeNear(x, z, 3.2)) return null;
+    if (nearCliff(x, z, 6)) return null;
     return {id:'g'+ci+','+cj, air:false, x, z, y:H(x, z) + 1.45, R:1.4, yaw};
   }
   if (r < 0.17){
-    if (nearCliff(x, z, 6) || treeNear(x, z, 3.8)) return null;
+    if (nearCliff(x, z, 6)) return null;
     return {id:'a'+ci+','+cj, air:true, x, z, y:H(x, z) + 3.3 + 0.5*hash(ci+82, cj), R:1.5, yaw};
   }
   return null;
@@ -540,6 +541,12 @@ function treeAt(ci, cj){
   if ((z < 45 && Math.abs(x) < 22) || (Math.abs(z) < 12 && Math.abs(x) < 45)) return null;   // open summit ridge for the drone shot
   if (nearCliff(x, z, 4)) return null;
   if (z > FINISH - 12 && z < FINISH + 30) return null;     // open finish area
+  // keep a clear space around every ring, so the denser forest never hides or blocks one
+  const gi = Math.floor(x/RGC), gj = Math.floor(z/RGC);
+  for (let dj=-1; dj<=1; dj++) for (let di=-1; di<=1; di++){
+    const g = ringAt(gi+di, gj+dj);
+    if (g && (g.x-x)*(g.x-x) + (g.z-z)*(g.z-z) < (g.air ? 16 : 12)) return null;
+  }
   const f = Math.min(1, Math.max(0, z)/FINISH);
   const base = 0.12 + 0.22*f + 0.38*f*f*f;                // denser all the way, ramping up hard in the last third
   const clump = vnoise(x*0.022+5, z*0.022-7);             // glades and thickets
@@ -556,7 +563,7 @@ function rebuildObstacles(px, pz){
   if (key === obstacleKey) return;
   obstacleKey = key;
   trees.length = 0;
-  for (let cj=pcj-6; cj<=pcj+16; cj++) for (let ci=pci-14; ci<=pci+14; ci++){
+  for (let cj=pcj-8; cj<=pcj+22; cj++) for (let ci=pci-20; ci<=pci+20; ci++){
     const t = treeAt(ci, cj);
     if (!t || trees.length >= MAXT) continue;
     _p.set(t.x, H(t.x, t.z) - 0.4, t.z); _q.setFromAxisAngle(UP, t.rot); _s.set(t.s*TREE_W, t.s*t.hv, t.s*TREE_W);
@@ -754,7 +761,7 @@ const SKIER_COLORS = {
   poles: 0x9aa3ad, baskets: 0x15191e,
 };
 
-// Map a Treeline outfit ({jacket, pants, helmet, lens, gloves, ski, stripe, hair, girl}) to skier colors.
+// Map a POV Ski outfit ({jacket, pants, helmet, lens, gloves, ski, stripe, hair, girl}) to skier colors.
 function colorsFromOutfit(o) {
   const c = { jacket: o.jacket, pants: o.pants, jacketTrim: o.pants, helmet: o.helmet,
     goggleLens: o.lens, gloves: o.gloves, skis: o.ski, stripe: o.stripe, hair: o.hair };
@@ -1051,7 +1058,7 @@ function createSkier(opts = {}) {
       for (const key in target) state[key] += (target[key] - state[key]) * k;
       apply(state);
     },
-    /** Recolor live: a Treeline outfit object, or {colors, ponytail}. */
+    /** Recolor live: a POV Ski outfit object, or {colors, ponytail}. */
     setOutfit(o) {
       const c = o.colors || colorsFromOutfit(o);
       for (const k in c) if (m[k]) m[k].color.set(c[k]);
@@ -1620,7 +1627,7 @@ function endReplay(){           // skip straight to the end screen
 }
 $('watch').addEventListener('click', () => startReplay(0));
 
-/* ---------- share a clip: the last 30 seconds re-rendered into a video, with the link burned in ---------- */
+/* ---------- share a clip: the last 10 seconds re-rendered into a video, with the link burned in ---------- */
 const GAME_URL = 'https://goohaoyu.github.io/pov-ski/';
 const GAME_URL_SHORT = GAME_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
 let clip = null, clipFile = null, clipURL = null;
@@ -1658,7 +1665,7 @@ function startClip(){
   mr.ondataavailable = e => { if (e.data && e.data.size) clip && clip.chunks.push(e.data); };
   const me = clip;
   mr.onstop = () => clipDone(me);
-  startReplay(Math.max(0, rec[rec.length-1].t - 30));
+  startReplay(Math.max(0, rec[rec.length-1].t - 10));
   $('rlabel').textContent = 'Recording clip'; $('skip').textContent = 'Cancel';
   mr.start(250);
 }
@@ -2173,13 +2180,14 @@ function renderInset(el, cam, showSkier, showRig = false){
   if (!r.width) return;
   skier.visible = showSkier; rig.visible = showRig;
   const prevAspect = cam.aspect;
-  const bw = 1.5, x = r.left + bw, y = innerHeight - r.bottom + bw, w = r.width - 2*bw, h = r.height - 2*bw;
+  const cr = canvas.getBoundingClientRect();           // measure against the canvas, not the window (iOS toolbars change the window)
+  const bw = 1.5, x = r.left - cr.left + bw, y = cr.bottom - r.bottom + bw, w = r.width - 2*bw, h = r.height - 2*bw;
   cam.aspect = w/h; cam.updateProjectionMatrix();
   renderer.setScissorTest(true);
   renderer.setViewport(x, y, w, h); renderer.setScissor(x, y, w, h);
   renderer.render(scene, cam);
   renderer.setScissorTest(false);
-  renderer.setViewport(0, 0, innerWidth, innerHeight);
+  renderer.setViewport(0, 0, viewW, viewH);           // back to exactly the size the renderer was set to
   cam.aspect = prevAspect; cam.updateProjectionMatrix();
   skier.visible = false; rig.visible = true;
 }
@@ -2195,7 +2203,7 @@ function updateReplayCam(dt){
   if (rc.snap){ rc.pos.copy(_o); rc.look.copy(_t); rc.snap = false; }
   else { rc.pos.lerp(_o, Math.min(1, dt*3)); rc.look.lerp(_t, Math.min(1, dt*5)); }
   replayCam.position.copy(rc.pos); replayCam.lookAt(rc.look);
-  replayCam.aspect = innerWidth/innerHeight; replayCam.updateProjectionMatrix();
+  replayCam.aspect = viewW/viewH; replayCam.updateProjectionMatrix();
 }
 function renderRear(){
   const fx = Math.sin(P.th), fz = Math.cos(P.th);
@@ -2368,29 +2376,44 @@ function updateHUD(){
     const gap = Math.max(0, Math.round(P.z - avFront(avT, P.x)));
     av.textContent = 'Avalanche ' + gap + ' m behind'; av.className = gap < 30 ? 'near' : '';
   }
-  drawMap();
 }
 
+let viewW = 1, viewH = 1;
 function resize(){
-  const w = innerWidth, h = innerHeight, a = w/h;
+  // the canvas fills the screen through CSS; size the renderer to what it actually covers
+  const w = Math.max(1, canvas.clientWidth || innerWidth), h = Math.max(1, canvas.clientHeight || innerHeight), a = w/h;
+  viewW = w; viewH = h;
   renderer.setSize(w, h, false);
+  renderer.setViewport(0, 0, w, h);
   camera.aspect = a; drone.aspect = a;
   fovBase = a >= 1.2 ? 66 : Math.min(100, 2*Math.atan(Math.tan(38*Math.PI/180)/Math.max(a, 0.4))*180/Math.PI);
   cam.fov = fovBase; camera.fov = fovBase;
   drone.fov = a >= 1 ? 55 : 78;
   camera.updateProjectionMatrix(); drone.updateProjectionMatrix();
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  mapC.width = MAP_W*dpr; mapC.height = MAP_H*dpr;
 }
 addEventListener('resize', resize);
+if (window.visualViewport) visualViewport.addEventListener('resize', resize);
+addEventListener('orientationchange', () => setTimeout(resize, 250));
+// iPhone: stop double-tap and pinch from zooming the page mid-run (menus and the share dialog still scroll and tap normally)
+const inUI = t => t && t.closest && t.closest('#panel, #clipbox');
+document.addEventListener('gesturestart', e => e.preventDefault(), {passive:false});
+document.addEventListener('touchmove', e => { if (e.touches.length > 1 || !inUI(e.target)) e.preventDefault(); }, {passive:false});
+let lastTouchEnd = 0;
+document.addEventListener('touchend', e => {
+  const now = performance.now();
+  if (!inUI(e.target) && now - lastTouchEnd < 350) e.preventDefault();
+  lastTouchEnd = now;
+}, {passive:false});
+document.addEventListener('dblclick', e => e.preventDefault());
 
 /* ---------- loop ---------- */
 reset(); P.v = 0; resize();
 let last = performance.now();
 function frame(now){
-  const dt = Math.min(0.05, (now - last)/1000); last = now; time += dt;
+  if (canvas.clientWidth !== viewW || canvas.clientHeight !== viewH) resize();
+  const rawDt = (now - last)/1000, dt = Math.min(0.05, rawDt); last = now; time += dt;
   if (state === 'playing'){ step(dt); recordFrame(dt); }
-  else if (state === 'replay') replayTick(dt);
+  else if (state === 'replay') replayTick(Math.min(0.25, rawDt));   // replays follow real time, so clips never come out in slow motion
   else if (state === 'crashed'){ crashT += dt; avT += dt; }   // the slide keeps rolling over the crash site
   else if (state === 'finished') glide(dt);
   refreshCliffs(P.x, P.z);
