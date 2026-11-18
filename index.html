@@ -118,7 +118,9 @@ kbd{font:inherit;font-weight:600;border:1.5px solid var(--ink);border-radius:4px
 .clipbtns button,#cclose{font:600 1.15rem "Barlow Condensed",sans-serif;color:var(--ink);background:rgba(28,37,48,.06);
   border:1.5px solid rgba(28,37,48,.3);border-radius:4px;padding:.5em .6em;cursor:pointer;text-align:center}
 .clipbtns button.main{grid-column:1 / -1;background:var(--accent);border-color:var(--accent)}
-.clipbtns button[hidden]{display:none}
+.clipbtns button[hidden],.cliphint[hidden]{display:none}
+.clipbtns .wide{grid-column:1 / -1;margin:0}
+#posthint{background:rgba(232,194,31,.18);border-left:3px solid var(--accent);padding:.5rem .6rem;color:var(--ink);border-radius:0}
 .clipbtns button:focus-visible,#cclose:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .cliphint{margin:0 0 .8rem;font-size:1rem;line-height:1.3;color:var(--ink-soft)}
 #cclose{width:100%;background:transparent}
@@ -183,15 +185,19 @@ kbd{font:inherit;font-weight:600;border:1.5px solid var(--ink);border-radius:4px
     <video id="clipvid" playsinline muted loop controls></video>
     <p class="cliphint" id="cliptext"></p>
     <div class="clipbtns">
-      <button id="cshare" class="main" type="button">Share…</button>
+      <button id="cshare" class="main" type="button">Share video</button>
+      <p class="cliphint wide" id="sharehint">Pick X, Instagram, TikTok, WhatsApp or any app in the menu. The video and caption go with it.</p>
+      <p class="cliphint wide" id="pickhint">Post the video to:</p>
+      <button id="cx" type="button" data-net="x">X</button>
+      <button id="cig" type="button" data-net="ig">Instagram</button>
+      <button id="ctt" type="button" data-net="tt">TikTok</button>
+      <button id="cfb" type="button" data-net="fb">Facebook</button>
+      <button id="crd" type="button" data-net="rd">Reddit</button>
+      <button id="cwa" type="button" data-net="wa">WhatsApp</button>
       <button id="cdl" type="button">Download video</button>
       <button id="ccopy" type="button">Copy link</button>
-      <button id="cx" type="button">Post on X</button>
-      <button id="cfb" type="button">Facebook</button>
-      <button id="crd" type="button">Reddit</button>
-      <button id="cwa" type="button">WhatsApp</button>
     </div>
-    <p class="cliphint">For Instagram or TikTok, download the video and post it from the app. The link to play is shown in the video.</p>
+    <p class="cliphint" id="posthint" role="status" hidden></p>
     <button id="cclose" type="button">Close</button>
   </div>
 </div>
@@ -1735,38 +1741,66 @@ function drawClipFrame(dt){
   x.font = `600 ${Math.round(24*u)}px "Barlow Condensed", "Arial Narrow", sans-serif`;
   x.fillText('POV SKI  ·  Play free: ' + GAME_URL_SHORT, W/2, Hh - bh/2 + 8*u);
 }
+let fileShare = false;
+const NETS = {
+  x:  {name:'X',         open:() => `https://x.com/intent/tweet?text=${enc(shareText() + ' ' + GAME_URL)}`, link:() => `https://x.com/intent/tweet?text=${enc(shareText())}&url=${enc(GAME_URL)}`, how:'In the post, click the media (photo) icon and choose the video, or drag it in.'},
+  ig: {name:'Instagram', open:() => 'https://www.instagram.com/', how:'Click Create (+), choose the video, then paste the caption.'},
+  tt: {name:'TikTok',    open:() => 'https://www.tiktok.com/upload', how:'Select the video to upload, then paste the caption.'},
+  fb: {name:'Facebook',  open:() => 'https://www.facebook.com/', link:() => `https://www.facebook.com/sharer/sharer.php?u=${enc(GAME_URL)}`, how:'Start a post, add the video with Photo/video, then paste the caption.'},
+  rd: {name:'Reddit',    open:() => `https://www.reddit.com/submit?title=${enc(shareText())}`, link:() => `https://www.reddit.com/submit?url=${enc(GAME_URL)}&title=${enc(shareText())}`, how:'Switch to the Images & Video tab, add the video, and paste the link in the body.'},
+  wa: {name:'WhatsApp',  open:() => `https://wa.me/?text=${enc(shareText() + ' ' + GAME_URL)}`, link:() => `https://wa.me/?text=${enc(shareText() + ' ' + GAME_URL)}`, how:'Pick a chat, attach the video with the paperclip, then send.'},
+};
 function showClipBox(ok){
   $('cliptitle').textContent = ok ? 'Your clip is ready' : 'Share your run';
   $('clipvid').hidden = !ok;
   if (ok){ $('clipvid').src = clipURL; $('clipvid').play().catch(() => {}); }
   $('cliptext').textContent = ok ? shareText() : 'This browser can\'t record video, but you can still share a link to the game. ' + shareText();
+  // phones (and some computers) can hand the video file straight to any app through the share menu
+  fileShare = !!(ok && navigator.share && navigator.canShare && clipFile && navigator.canShare({files:[clipFile]}));
+  $('cshare').hidden = $('sharehint').hidden = !fileShare;
+  $('pickhint').hidden = fileShare;
+  document.querySelectorAll('[data-net]').forEach(btn => btn.hidden = fileShare || (!ok && !NETS[btn.dataset.net].link));
   $('cdl').hidden = !ok;
-  $('cshare').hidden = !(navigator.share && (!ok || (navigator.canShare && navigator.canShare({files:[clipFile]}))));
+  $('posthint').hidden = true;
   $('clipbox').hidden = false;
-  ($('cshare').hidden ? $('cdl').hidden ? $('ccopy') : $('cdl') : $('cshare')).focus({preventScroll:true});
+  (fileShare ? $('cshare') : ok ? $('cx') : $('ccopy')).focus({preventScroll:true});
 }
 function closeClipBox(){ $('clipbox').hidden = true; $('clipvid').pause(); $('share').focus({preventScroll:true}); }
 const enc = encodeURIComponent;
-const openShare = url => window.open(url, '_blank', 'noopener,noreferrer,width=640,height=640');
+const openShare = url => window.open(url, '_blank', 'noopener,noreferrer');
 $('share').addEventListener('click', () => { if (clipFile && clipURL && clipFor === lastRun) showClipBox(true); else { clipFor = lastRun; startClip(); } });
 let clipFor = null;
-$('cshare').addEventListener('click', () => {
-  const data = {title:'POV Ski', text:shareText() + ' ' + GAME_URL};
-  if (!$('clipvid').hidden && clipFile) data.files = [clipFile]; else data.url = GAME_URL;
-  navigator.share(data).catch(() => {});
-});
-$('cdl').addEventListener('click', () => {
+function saveClip(){
   const a = document.createElement('a'); a.href = clipURL; a.download = clipFile.name;
   document.body.append(a); a.click(); a.remove();
+}
+function copyCaption(){
+  const t = shareText() + ' ' + GAME_URL;
+  return navigator.clipboard ? navigator.clipboard.writeText(t).then(() => true, () => false) : Promise.resolve(false);
+}
+$('cshare').addEventListener('click', () => {
+  const data = {title:'POV Ski', text:shareText() + ' ' + GAME_URL};
+  if (fileShare) data.files = [clipFile]; else data.url = GAME_URL;
+  navigator.share(data).catch(() => {});
 });
+// On a computer the sites can't take a video from another page, so one click does everything else:
+// saves the video, copies the caption, and opens the site ready to post. Then you attach the saved video.
+document.querySelectorAll('[data-net]').forEach(b => b.addEventListener('click', () => {
+  const net = NETS[b.dataset.net], hasVideo = !$('clipvid').hidden && clipFile;
+  if (!hasVideo){ openShare(net.link()); return; }
+  saveClip();
+  openShare(net.open());
+  copyCaption().then(copied => {
+    const h = $('posthint');
+    h.textContent = `Your video (${clipFile.name}) was saved to your Downloads` + (copied ? ' and the caption with the play link is copied.' : '.') + ` ${net.name} is open in a new tab. ${net.how}`;
+    h.hidden = false; h.scrollIntoView({block:'nearest', behavior:'smooth'});
+  });
+}));
+$('cdl').addEventListener('click', saveClip);
 $('ccopy').addEventListener('click', e => {
   const b = e.currentTarget, done = t => { b.textContent = t; setTimeout(() => b.textContent = 'Copy link', 1600); };
-  (navigator.clipboard ? navigator.clipboard.writeText(shareText() + ' ' + GAME_URL) : Promise.reject()).then(() => done('Copied'), () => done('Copy failed'));
+  copyCaption().then(ok => done(ok ? 'Copied' : 'Copy failed'));
 });
-$('cx').addEventListener('click', () => openShare(`https://x.com/intent/tweet?text=${enc(shareText())}&url=${enc(GAME_URL)}`));
-$('cfb').addEventListener('click', () => openShare(`https://www.facebook.com/sharer/sharer.php?u=${enc(GAME_URL)}`));
-$('crd').addEventListener('click', () => openShare(`https://www.reddit.com/submit?url=${enc(GAME_URL)}&title=${enc(shareText())}`));
-$('cwa').addEventListener('click', () => openShare(`https://wa.me/?text=${enc(shareText() + ' ' + GAME_URL)}`));
 $('cclose').addEventListener('click', closeClipBox);
 $('clipbox').addEventListener('click', e => { if (e.target === e.currentTarget) closeClipBox(); });
 $('skip').addEventListener('click', endReplay);
