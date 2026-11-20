@@ -4,6 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>POV Ski</title>
+<meta name="description" content="A first-person tree-skiing game in your browser. Thread the trees, grab snacks, and outrun the avalanche.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="POV Ski">
+<meta property="og:title" content="POV Ski: can you outrun the avalanche?">
+<meta property="og:description" content="A first-person tree-skiing game in your browser. Thread the trees, grab snacks, and outrun the avalanche. Free, no download.">
+<meta property="og:url" content="https://gu-project.com/pov-ski">
+<meta property="og:image" content="https://goohaoyu.github.io/pov-ski/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="First-person view of skis heading into a snowy low-poly forest">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="POV Ski: can you outrun the avalanche?">
+<meta name="twitter:description" content="A first-person tree-skiing game in your browser. Free, no download.">
+<meta name="twitter:image" content="https://goohaoyu.github.io/pov-ski/og.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
@@ -205,6 +219,7 @@ kbd{font:inherit;font-weight:600;border:1.5px solid var(--ink);border-radius:4px
       <button id="cig" type="button" data-net="ig">Instagram</button>
       <button id="ctt" type="button" data-net="tt">TikTok</button>
       <button id="cfb" type="button" data-net="fb">Facebook</button>
+      <button id="cli" type="button" data-net="li">LinkedIn</button>
       <button id="crd" type="button" data-net="rd">Reddit</button>
       <button id="cwa" type="button" data-net="wa">WhatsApp</button>
       <button id="cdl" type="button">Download video</button>
@@ -1651,6 +1666,7 @@ function tryStart(){
   const wasTitle = state === 'title';
   reset(); state = 'playing'; jumpQueued = false;
   rec.length = 0; recT = 0; clipFor = null; avT = 0; avAnnounced = false;
+  track('play', 'Run started');
   for (let i=0;i<AVD;i++){ avLife[i] = 0; avPos[i*3+1] = -1e5; } $('watch').hidden = true;
   $('panel').hidden = true; $('hud').hidden = false;
   if (wasTitle) flash(0.6);   // cut from the drone to the skier's eyes
@@ -1670,6 +1686,7 @@ function crash(kind){
   const isBest = dist > best;
   if (isBest){ best = dist; try { localStorage.setItem('treeline-best', String(best)); } catch(e){} }
   lastRun = {kind, dist, top, isBest, score:P.score, ringsGot:P.ringsGot, time:P.time};
+  trackDistance(kind, dist);
   setTimeout(showEndPanel, kind === 'avalanche' ? 700 : 2400);   // give the zoom-out time to play
 }
 let lastRun = null;
@@ -1771,6 +1788,20 @@ function endReplay(){           // skip straight to the end screen
 }
 $('watch').addEventListener('click', () => startReplay(0));
 
+/* ---------- GoatCounter events: every run started, and how far each run got ---------- */
+function track(path, title){
+  try {
+    if (window.goatcounter && window.goatcounter.count)
+      window.goatcounter.count({path, title, event:true, no_session:true});   // no_session: count every play, not just once per visitor
+  } catch(e){}
+}
+function trackDistance(kind, dist){
+  if (kind === 'finish'){ track('distance-5000-finished', 'Reached the finish (5,000 m)'); return; }
+  const lo = Math.min(4500, Math.floor(dist/500)*500), hi = lo + 499;
+  const pad = n => String(n).padStart(4, '0');
+  track(`distance-${pad(lo)}-${pad(hi)}m`, `Run ended at ${lo.toLocaleString()}–${hi.toLocaleString()} m`);
+}
+
 /* ---------- share a clip: the last 10 seconds re-rendered into a video, with the link burned in ---------- */
 const GAME_URL = 'https://gu-project.com/pov-ski';
 const GAME_URL_SHORT = GAME_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -1863,32 +1894,45 @@ function drawClipFrame(dt){
   x.fillText('POV SKI  ·  Play free: ' + GAME_URL_SHORT, W/2, Hh - bh/2 + 8*u);
 }
 let fileShare = false;
+// Networks with a web share page get the caption and game link filled in, ready to post. Their link
+// preview (the card image and title) comes from the og: tags at the top of the page.
+// Instagram and TikTok have no web share page: they need the video uploaded, so those save it first.
 const NETS = {
-  x:  {name:'X',         open:() => `https://x.com/intent/tweet?text=${enc(shareText() + ' ' + GAME_URL)}`, link:() => `https://x.com/intent/tweet?text=${enc(shareText())}&url=${enc(GAME_URL)}`, how:'In the post, click the media (photo) icon and choose the video, or drag it in.'},
-  ig: {name:'Instagram', open:() => 'https://www.instagram.com/', how:'Click Create (+), choose the video, then paste the caption.'},
-  tt: {name:'TikTok',    open:() => 'https://www.tiktok.com/upload', how:'Select the video to upload, then paste the caption.'},
-  fb: {name:'Facebook',  open:() => 'https://www.facebook.com/', link:() => `https://www.facebook.com/sharer/sharer.php?u=${enc(GAME_URL)}`, how:'Start a post, add the video with Photo/video, then paste the caption.'},
-  rd: {name:'Reddit',    open:() => `https://www.reddit.com/submit?title=${enc(shareText())}`, link:() => `https://www.reddit.com/submit?url=${enc(GAME_URL)}&title=${enc(shareText())}`, how:'Switch to the Images & Video tab, add the video, and paste the link in the body.'},
-  wa: {name:'WhatsApp',  open:() => `https://wa.me/?text=${enc(shareText() + ' ' + GAME_URL)}`, link:() => `https://wa.me/?text=${enc(shareText() + ' ' + GAME_URL)}`, how:'Pick a chat, attach the video with the paperclip, then send.'},
+  x:  {name:'X',         link:() => `https://x.com/intent/tweet?text=${enc(shareText())}&url=${enc(GAME_URL)}`},
+  fb: {name:'Facebook',  link:() => `https://www.facebook.com/sharer/sharer.php?u=${enc(GAME_URL)}`},
+  li: {name:'LinkedIn',  link:() => `https://www.linkedin.com/sharing/share-offsite/?url=${enc(GAME_URL)}`},
+  rd: {name:'Reddit',    link:() => `https://www.reddit.com/submit?url=${enc(GAME_URL)}&title=${enc(shareText())}`},
+  wa: {name:'WhatsApp',  link:() => `https://api.whatsapp.com/send?text=${enc(shareText() + ' ' + GAME_URL)}`},
+  ig: {name:'Instagram', upload:'https://www.instagram.com/', how:'Click Create (+), choose the video, then paste the caption.'},
+  tt: {name:'TikTok',    upload:'https://www.tiktok.com/upload', how:'Select the video to upload, then paste the caption.'},
 };
+// Phones and tablets: hand the video straight to any app through the system share menu.
+// Computers: the system share menu (Windows/macOS) has no social apps, so use the network buttons instead.
+const touchDevice = (navigator.maxTouchPoints || 0) > 0 && window.matchMedia && matchMedia('(pointer: coarse)').matches;
 function showClipBox(ok){
   $('cliptitle').textContent = ok ? 'Your clip is ready' : 'Share your run';
   $('clipvid').hidden = !ok;
   if (ok){ $('clipvid').src = clipURL; $('clipvid').play().catch(() => {}); }
   $('cliptext').textContent = ok ? shareText() : 'This browser can\'t record video, but you can still share a link to the game. ' + shareText();
   // phones (and some computers) can hand the video file straight to any app through the share menu
-  fileShare = !!(ok && navigator.share && navigator.canShare && clipFile && navigator.canShare({files:[clipFile]}));
+  fileShare = !!(touchDevice && ok && navigator.share && navigator.canShare && clipFile && navigator.canShare({files:[clipFile]}));
   $('cshare').hidden = $('sharehint').hidden = !fileShare;
   $('pickhint').hidden = fileShare;
   document.querySelectorAll('[data-net]').forEach(btn => btn.hidden = fileShare || (!ok && !NETS[btn.dataset.net].link));
+  $('pickhint').textContent = ok ? 'Share your run on:' : 'Share the game on:';
   $('cdl').hidden = !ok;
   $('posthint').hidden = true;
   $('clipbox').hidden = false;
-  (fileShare ? $('cshare') : ok ? $('cx') : $('ccopy')).focus({preventScroll:true});
+  (fileShare ? $('cshare') : $('cx')).focus({preventScroll:true});
 }
 function closeClipBox(){ $('clipbox').hidden = true; $('clipvid').pause(); $('share').focus({preventScroll:true}); }
 const enc = encodeURIComponent;
-const openShare = url => window.open(url, '_blank', 'noopener,noreferrer');
+function openShare(url){          // returns false if the browser blocked the new tab
+  const w = window.open(url, '_blank');
+  if (!w) return false;
+  try { w.opener = null; } catch(e){}
+  return true;
+}
 $('share').addEventListener('click', () => { if (clipFile && clipURL && clipFor === lastRun) showClipBox(true); else { clipFor = lastRun; startClip(); } });
 let clipFor = null;
 function saveClip(){
@@ -1904,15 +1948,28 @@ $('cshare').addEventListener('click', () => {
   if (fileShare) data.files = [clipFile]; else data.url = GAME_URL;
   navigator.share(data).catch(() => {});
 });
-// On a computer the sites can't take a video from another page, so one click does everything else:
-// saves the video, copies the caption, and opens the site ready to post. Then you attach the saved video.
+// Share buttons open the network's own share page in a new tab with the caption and link filled in.
+// Instagram and TikTok only take uploads, so for those: save the video, copy the caption, open the upload page.
 document.querySelectorAll('[data-net]').forEach(b => b.addEventListener('click', () => {
-  const net = NETS[b.dataset.net], hasVideo = !$('clipvid').hidden && clipFile;
-  if (!hasVideo){ openShare(net.link()); return; }
+  const net = NETS[b.dataset.net], hasVideo = !$('clipvid').hidden && clipFile, h = $('posthint');
+  track('share-' + b.dataset.net, 'Shared to ' + net.name);
+  if (net.link){
+    const url = net.link();
+    h.textContent = '';
+    if (openShare(url)){
+      h.textContent = `${net.name} is open in a new tab with your post ready.`
+        + (hasVideo ? ` Want the video in it too? Click Download video, then drag the file into the post.` : '');
+    } else {                                   // pop-up blocked: give a plain link to click instead
+      const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = `Open ${net.name}`;
+      h.append('Your browser blocked the new tab. ', a, ' to post.');
+    }
+    h.hidden = false; h.scrollIntoView({block:'nearest', behavior:'smooth'});
+    return;
+  }
+  if (!hasVideo){ copyCaption(); openShare(net.upload); return; }   // (only reachable if the clip failed)
   saveClip();
-  openShare(net.open());
+  openShare(net.upload);
   copyCaption().then(copied => {
-    const h = $('posthint');
     h.textContent = `Your video (${clipFile.name}) was saved to your Downloads` + (copied ? ' and the caption with the play link is copied.' : '.') + ` ${net.name} is open in a new tab. ${net.how}`;
     h.hidden = false; h.scrollIntoView({block:'nearest', behavior:'smooth'});
   });
@@ -2235,6 +2292,7 @@ function finishRun(){
   if (isBest){ bestPts = P.score; try { localStorage.setItem('treeline-best-hp', String(bestPts)); } catch(e){} }
   if (dist > best){ best = dist; try { localStorage.setItem('treeline-best', String(best)); } catch(e){} }
   lastRun = {kind:'finish', dist, top, isBest, score:P.score, ringsGot:P.ringsGot, time:P.time};
+  trackDistance('finish', dist);
   setTimeout(showEndPanel, 1400);
 }
 function glide(dt){          // after the finish line, coast to a stop
