@@ -1,6 +1,6 @@
 # POV Ski
 
-A first-person tree-skiing game that runs in the browser. Ski 5,000 m down a foggy, low-poly mountain, thread the trees, fly through rings, and outrun the avalanche.
+A first-person tree-skiing game that runs in the browser. Ski 5,000 m down a foggy, low-poly mountain, thread the trees, grab food along the way, and outrun the avalanche.
 
 ## Play
 
@@ -21,8 +21,10 @@ Works on phones and computers in any modern browser (Chrome, Safari, Edge or Fir
 
 - **Speed:** point your skis down the hill to go faster, across it to slow down. Turns get wider the faster you go.
 - **Health:** you start with 200 (max 1,000). Brushing branches costs 5, clipping a trunk with your ski tips costs 200, and hitting a trunk ends the run.
-- **Rings:** gold ground rings heal 25, pink air rings heal 100. Some float out past cliff edges.
-- **Avalanche:** it releases 3 seconds after you drop in at 60 km/h and speeds up by 10 km/h every 1,000 m.
+- **Food:** low-poly treats float over the snow. A drumstick heals 25 and a tomahawk steak heals 100. Roast turkeys hang up high, so jump for them; they heal 100.
+- **Strawberries:** a strawberry raises your top speed by 20% for 10 seconds.
+- **Terrain:** the slope rolls in long, gentle swells that can pop you into small airs.
+- **Avalanche:** it releases 3 seconds after you drop in at 60 km/h and speeds up by 10 km/h every 1,000 m. If you crash into something, it stops and the camera pulls back to a view of the mountain.
 - **Fog and forest:** both get thicker the further down you go.
 
 After a run you can watch a replay or share a clip of your last 10 seconds.

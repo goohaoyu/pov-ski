@@ -63,6 +63,9 @@ body:has(#panel:not([hidden])) #touch{display:none}   /* or behind the start and
 .pop small{display:block;font-size:1rem;font-weight:600;color:var(--ink-soft);margin-top:.1rem}
 .pop.air{color:#c2186b}
 .pop.hurt{color:#c0262d}
+.pop.berry{color:#d81b3a}
+#boost{margin-top:.3rem;font-weight:700;font-size:1.05rem;color:#d81b3a;text-shadow:0 0 10px rgba(238,243,246,.95)}
+#boost i{display:block;height:4px;margin-top:2px;margin-left:auto;background:#d81b3a;border-radius:2px;width:100%}
 .hp{display:flex;align-items:center;gap:.5rem;margin-top:.4rem;font-weight:600;font-variant-numeric:tabular-nums;
   text-shadow:0 0 12px rgba(238,243,246,.9),0 0 3px rgba(238,243,246,.9)}
 .hp #pts{font-size:1.5rem}
@@ -179,6 +182,7 @@ kbd{font:inherit;font-weight:600;border:1.5px solid var(--ink);border-radius:4px
     </div>
     <div class="right">
       <div class="stat"><span id="spd">0</span><small>km/h</small></div>
+      <div id="boost" hidden>Speed boost<i></i></div>
       <button id="mute" type="button">Mute</button>
     </div>
   </div>
@@ -220,7 +224,7 @@ kbd{font:inherit;font-weight:600;border:1.5px solid var(--ink);border-radius:4px
   <div class="inner">
     <h1 id="ptitle">POV Ski</h1>
     <canvas id="runmap" hidden aria-label="Map of your run"></canvas>
-    <p id="pbody">Ski 5,000 m through the trees in thick fog. You start with 200 health: brushing branches costs 5, clipping a trunk with your ski tips costs 200, and hitting a trunk ends the run. Fly through rings to heal, up to 1,000.</p>
+    <p id="pbody">Ski 5,000 m through the trees in thick fog. You start with 200 health: brushing branches costs 5, clipping a trunk with your ski tips costs 200, and hitting a trunk ends the run. Grab the floating drumsticks, tomahawk steaks and roast turkeys to heal, up to 1,000. Turkeys hang high, so jump for them. Strawberries raise your top speed by 20% for 10 seconds.</p>
     <dl class="keys" id="keys">
       <dt class="desk"><kbd>←</kbd><kbd>→</kbd></dt><dd class="desk">Turn your skis</dd>
       <dt class="desk"><kbd>Space</kbd></dt><dd class="desk">Tap to jump, hold to jump higher</dd>
@@ -267,8 +271,8 @@ function cliffAt(ci, cj){
   if (c !== undefined) return c;
   c = null;
   const zc = cj*CLZ + 30 + 60*hash(ci*3+11, cj*5-7);
-  if (zc > 160 && (zc < FINISH - 150 || zc > FINISH + 80) && hash(ci-71, cj+29) < 0.55){
-    c = {xc: ci*CLX + 45 + (hash(ci+5, cj+5)-0.5)*40, zc, w: 18 + 32*hash(ci+9, cj-9), d: 4 + 5*hash(ci-13, cj+13), ph: hash(ci, cj+99)*6.28, ci, cj};
+  if (false){                                  // v2: no cliffs; the slope rolls gently instead (see baseH)
+    c = {xc: ci*CLX + 45 + (hash(ci+5, cj+5)-0.5)*40, zc, w: 14 + 22*hash(ci+9, cj-9), d: 2 + 2.5*hash(ci-13, cj+13), ph: hash(ci, cj+99)*6.28, ci, cj};
   }
   if (cliffCache.size > 4000) cliffCache.clear();
   cliffCache.set(key, c); return c;
@@ -309,7 +313,16 @@ function baseH(x, z){
   return RIDGE_A*z + RIDGE_B*Math.sqrt(z*z + 36) + ridge(x, z)
     + 4.0*vnoise(x*0.012-40, z*0.012+3)
     + 2.4*vnoise(x*0.035, z*0.035)
-    + 0.8*vnoise(x*0.11+17, z*0.11-9);
+    + 0.8*vnoise(x*0.11+17, z*0.11-9)
+    + rollers(x, z);
+}
+// Gradual undulations: long, soft rollers across the slope that ease you into small airs and dips.
+// Each crest wanders a little across the slope so they never read as straight lines. None at the summit.
+function rollers(x, z){
+  if (z < 20) return 0;
+  const fade = sstep((z - 20)/80);
+  const wob = 14*vnoise(x*0.008 + 5, z*0.006 - 2);
+  return fade*(2.0*Math.sin((z + wob)*0.055) + 0.9*Math.sin((z - wob*0.6)*0.11 + 1.7));
 }
 function H(x, z){
   let h = baseH(x, z);
@@ -501,14 +514,101 @@ const rockParts = [
 const pillowPart = part(lumpy(new THREE.IcosahedronGeometry(1, 1), 0.18), M(0xf6f9fb), MAXP);
 
 const TC = 5, RC = 13, PC = 9, RGC = 26;
-/* Rings: ground rings stand on the snow; air rings float where only a jump gets you through
-   (free-floating, just past boulders, and out past cliff lips). */
-const RING_PTS = {ground: 25, air: 100};
+/* Food: drumsticks and steaks float just above the snow; roast turkeys hang up high where only a
+   jump gets you to them (free-floating, just past boulders, and out past cliff lips). Low-poly, spinning. */
+const FOOD_PTS = {drum: 25, steak: 100, turkey: 100, berry: 0};
+const FOOD_NAME = {berry: 'Strawberry!', drum: 'Drumstick!', steak: 'Tomahawk!', turkey: 'Turkey!'};
 const MAXRING = 160;
-const ringGeo = new THREE.TorusGeometry(1, 0.085, 6, 20);
-const ringMat = (c) => new THREE.MeshStandardMaterial({color:c, emissive:c, emissiveIntensity:0.55, flatShading:true, roughness:0.5});
-const groundRingMesh = part(ringGeo, ringMat(0xf2c230), MAXRING);
-const airRingMesh = part(ringGeo, ringMat(0xff3d9a), MAXRING);
+function mergeGeos(list){            // flat-shaded parts with one material: just concatenate the triangles
+  const arrs = list.map(g => (g.index ? g.toNonIndexed() : g).getAttribute('position').array);
+  const out = new Float32Array(arrs.reduce((n, a) => n + a.length, 0));
+  let o = 0; for (const a of arrs){ out.set(a, o); o += a.length; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(out, 3));
+  g.computeVertexNormals(); return g;
+}
+function blob(r, detail, amt, sx, sy, sz, x, y, z){
+  const g = new THREE.IcosahedronGeometry(r, detail).toNonIndexed();
+  const p = g.getAttribute('position');
+  for (let i=0;i<p.count;i++){          // the same jitter for shared corners, so the lumps stay closed
+    const X = p.getX(i), Y = p.getY(i), Z = p.getZ(i);
+    const k = 1 - amt/2 + amt*hash(Math.round(X*997) + Math.round(Z*991)*3, Math.round(Y*983));
+    p.setXYZ(i, X*k*sx + x, Y*k*sy + y, Z*k*sz + z);
+  }
+  return g;
+}
+const foodMat = (c, e = 0.22) => new THREE.MeshStandardMaterial({color:c, emissive:c, emissiveIntensity:e, flatShading:true, roughness:0.7, metalness:0});
+function boneGeo(x0, y0, z0, x1, y1, z1, r){   // a bone from one point to another with a double knob at the far end
+  const a = new THREE.Vector3(x0, y0, z0), b = new THREE.Vector3(x1, y1, z1), d = b.clone().sub(a), L = d.length();
+  const q = new THREE.Quaternion().setFromUnitVectors(UP, d.clone().normalize());
+  const shaft = new THREE.CylinderGeometry(r, r*1.1, L, 6).applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q)).translate((x0+x1)/2, (y0+y1)/2, (z0+z1)/2);
+  const side = new THREE.Vector3(0, 0, 1).cross(d).normalize().multiplyScalar(r*1.1);
+  if (side.lengthSq() < 1e-6) side.set(r*1.1, 0, 0);
+  const k1 = new THREE.IcosahedronGeometry(r*1.7, 0).translate(b.x + side.x, b.y + side.y, b.z + side.z);
+  const k2 = new THREE.IcosahedronGeometry(r*1.7, 0).translate(b.x - side.x, b.y - side.y, b.z - side.z);
+  return [shaft, k1, k2];
+}
+const FOOD = {};
+{ // drumstick: a fat lump of roast meat on a bone, tilted like you'd hold it
+  const tilt = new THREE.Matrix4().makeRotationZ(0.55);
+  const meat = mergeGeos([blob(0.42, 1, 0.22, 1.45, 1, 1, 0.18, 0, 0)]).applyMatrix4(tilt);
+  const bone = mergeGeos(boneGeo(-0.3, 0, 0, -0.8, 0, 0, 0.095)).applyMatrix4(tilt);
+  FOOD.drum = [part(meat, foodMat(0xa4572a), MAXRING), part(bone, foodMat(0xf3ead6, 0.3), MAXRING)].map(fix);
+}
+{ // tomahawk steak: a thick ribeye with a long frenched rib bone, standing up so you see the grill marks
+  const slab = new THREE.CylinderGeometry(0.58, 0.55, 0.46, 8).toNonIndexed();
+  const sp = slab.getAttribute('position');
+  for (let i=0;i<sp.count;i++){ const X = sp.getX(i), Z = sp.getZ(i); const k = 0.88 + 0.24*hash(Math.round(X*500), Math.round(Z*500)); sp.setXYZ(i, X*k*1.1, sp.getY(i), Z*k*0.9); }
+  const fat = new THREE.BoxGeometry(0.95, 0.44, 0.14).translate(0.05, 0, -0.5);
+  const grill = [-0.3, 0, 0.3].map(x => new THREE.BoxGeometry(0.07, 0.02, 0.8).rotateY(0.6).translate(x, 0.235, 0));
+  const bone = boneGeo(0.35, 0, -0.1, 1.55, 0, -0.35, 0.085);      // long rib bone sticking out the side
+  const up = new THREE.Matrix4().makeRotationX(-Math.PI/2).multiply(new THREE.Matrix4().makeTranslation(-0.45, 0, 0));
+  FOOD.steak = [
+    part(mergeGeos([slab]).applyMatrix4(up), foodMat(0x8e3523), MAXRING),
+    part(mergeGeos([fat]).applyMatrix4(up), foodMat(0xf1dfc0, 0.3), MAXRING),
+    part(mergeGeos(grill).applyMatrix4(up), foodMat(0x3a1a10, 0.05), MAXRING),
+    part(mergeGeos(bone).applyMatrix4(up), foodMat(0xf3ead6, 0.3), MAXRING),
+  ].map(fix);
+}
+{ // whole roast turkey on a platter
+  const body = blob(0.6, 1, 0.16, 1.15, 0.78, 1.0, 0, 0.05, 0);
+  const breast = blob(0.36, 1, 0.14, 1.2, 0.7, 1, 0, 0.32, 0.12);
+  const legs = [-1, 1].map(sd => blob(0.27, 1, 0.2, 0.85, 0.8, 1.45, sd*0.42, 0.02, 0.38));
+  const bones = [-1, 1].flatMap(sd => boneGeo(sd*0.45, 0.1, 0.72, sd*0.5, 0.3, 0.98, 0.05));
+  const plate = new THREE.CylinderGeometry(1.0, 0.9, 0.07, 10).translate(0, -0.5, 0);
+  FOOD.turkey = [
+    part(mergeGeos([body, breast, ...legs]), foodMat(0xc47a32), MAXRING),
+    part(mergeGeos(bones), foodMat(0xf6eedd, 0.35), MAXRING),
+    part(mergeGeos([plate]), foodMat(0xe9eef2, 0.15), MAXRING),
+  ].map(fix);
+}
+{ // strawberry: a fat tapered berry with seeds, a leafy green cap and a stem
+  const body = new THREE.IcosahedronGeometry(0.5, 1).toNonIndexed();
+  const bp = body.getAttribute('position');
+  for (let i=0;i<bp.count;i++){
+    const X = bp.getX(i), Y = bp.getY(i), Z = bp.getZ(i);
+    const k = (Y < 0 ? 1 + Y*1.1 : 1 - Y*0.15) * (0.94 + 0.12*hash(Math.round(X*991) + Math.round(Z*977)*3, Math.round(Y*983)));
+    bp.setXYZ(i, X*Math.max(0.12, k), Y*1.25, Z*Math.max(0.12, k));
+  }
+  const seeds = [];
+  for (let i=0;i<22;i++){
+    const a = i*2.4, y = -0.45 + 0.85*((i*0.618) % 1);
+    const w = (y < 0 ? 1 + (y/1.25)*1.1 : 1 - (y/1.25)*0.15)*0.5;
+    seeds.push(new THREE.IcosahedronGeometry(0.045, 0).translate(Math.cos(a)*w*0.98, y, Math.sin(a)*w*0.98));
+  }
+  const leaves = [];
+  for (let i=0;i<6;i++){
+    const a = i*Math.PI/3;
+    leaves.push(new THREE.ConeGeometry(0.12, 0.42, 3).scale(1, 1, 0.35).rotateZ(-1.25).translate(0.2, 0, 0).rotateY(a).translate(0, 0.62, 0));
+  }
+  const stem = new THREE.CylinderGeometry(0.035, 0.05, 0.22, 5).translate(0, 0.74, 0);
+  FOOD.berry = [
+    part(mergeGeos([body]), foodMat(0xe0263a, 0.3), MAXRING),
+    part(mergeGeos(seeds), foodMat(0xf6d24a, 0.4), MAXRING),
+    part(mergeGeos([...leaves, stem]), foodMat(0x3f9a3a, 0.25), MAXRING),
+  ].map(fix);
+}
+function fix(m){ m.count = 0; return m; }
+const FOOD_SCALE = {drum: 0.8, steak: 0.8, turkey: 0.72, berry: 0.95};
 function treeNear(x, z, d){
   const ci0 = Math.floor(x/TC), cj0 = Math.floor(z/TC);
   for (let cj=cj0-1; cj<=cj0+1; cj++) for (let ci=ci0-1; ci<=ci0+1; ci++){
@@ -523,26 +623,35 @@ function ringAt(ci, cj){
   const r = hash(ci-8000, cj-8000), yaw = (hash(ci+81, cj-81) - 0.5)*0.6;
   if (r < 0.11){
     if (nearCliff(x, z, 6)) return null;
-    return {id:'g'+ci+','+cj, air:false, x, z, y:H(x, z) + 1.45, R:1.4, yaw};
+    return {id:'g'+ci+','+cj, air:false, kind: hash(ci+90, cj-90) < 0.5 ? 'drum' : 'steak', x, z, y:H(x, z) + 1.45, R:1.4, yaw};
   }
   if (r < 0.17){
     if (nearCliff(x, z, 6)) return null;
-    return {id:'a'+ci+','+cj, air:true, x, z, y:H(x, z) + 3.3 + 0.5*hash(ci+82, cj), R:1.5, yaw};
+    return {id:'a'+ci+','+cj, air:true, kind:'turkey', x, z, y:H(x, z) + 3.3 + 0.5*hash(ci+82, cj), R:1.5, yaw};
+  }
+  if (r < 0.23){                                       // strawberries: a 20% higher top speed for a while
+    if (nearCliff(x, z, 6)) return null;
+    return {id:'s'+ci+','+cj, air:false, kind:'berry', x, z, y:H(x, z) + 1.3, R:1.25, yaw};
   }
   return null;
 }
 const rings = [], collected = new Set();
 function drawRings(){
-  let ng = 0, na = 0;
+  // every frame: each treat turns slowly and bobs a little, so it catches your eye through the fog
+  const n = {drum:0, steak:0, turkey:0, berry:0};
   for (const rg of rings){
     if (collected.has(rg.id)) continue;
-    _p.set(rg.x, rg.y, rg.z); _q.setFromAxisAngle(UP, rg.yaw); _s.set(rg.R, rg.R, rg.R);
+    const k = rg.kind, ph = rg.yaw*9 + rg.x*0.37;
+    if (n[k] >= MAXRING) continue;
+    const sc = rg.R*FOOD_SCALE[k];
+    const ft = performance.now()/1000;
+    _p.set(rg.x, rg.y + 0.12*Math.sin(ft*2.2 + ph), rg.z);
+    _q.setFromAxisAngle(UP, ft*1.5 + ph); _s.set(sc, sc, sc);
     _m.compose(_p, _q, _s);
-    if (rg.air){ if (na < MAXRING) airRingMesh.setMatrixAt(na++, _m); }
-    else if (ng < MAXRING) groundRingMesh.setMatrixAt(ng++, _m);
+    for (const m of FOOD[k]) m.setMatrixAt(n[k], _m);
+    n[k]++;
   }
-  groundRingMesh.count = ng; airRingMesh.count = na;
-  groundRingMesh.instanceMatrix.needsUpdate = true; airRingMesh.instanceMatrix.needsUpdate = true;
+  for (const k in FOOD) for (const m of FOOD[k]){ m.count = n[k]; m.instanceMatrix.needsUpdate = true; }
 }
 function rockAt(ci, cj){
   return null;                                        // boulders removed from the course
@@ -647,7 +756,7 @@ function rebuildObstacles(px, pz){
     if (hash(Math.round(rk.x*10)+90, Math.round(rk.z*10)) > 0.6) continue;
     const z = rk.z + rk.r + 9, x = rk.x;
     if (z > FINISH - 40 || treeNear(x, z, 3)) continue;
-    rings.push({id:'b'+key, air:true, x, z, y:H(x, z) + 3.2 + 0.4*rk.r, R:1.6, yaw:0});
+    rings.push({id:'b'+key, air:true, kind:'turkey', x, z, y:H(x, z) + 3.2 + 0.4*rk.r, R:1.6, yaw:0});
   }
   for (const cl of cliffs){                                  // one air ring out past each cliff lip
     // set on the flight path: 8 m out from the lip, centred on where your body is if you leave the
@@ -655,7 +764,7 @@ function rebuildObstacles(px, pz){
     const x = cl.xc, e = cliffEdge(cl, x), z = e + 8, lip = H(x, e - 0.05);
     const takeoff = H(x, e - 0.05) - H(x, e - 1.05);         // slope of the lip you leave from
     const fly = lip + 0.9 + takeoff*8 - 0.5*AIR_G*(8/20)*(8/20);
-    rings.push({id:'c'+cl.ci+','+cl.cj, air:true, x, z, y:Math.max(H(x, z) + 2.4, fly), R:2.3, yaw:0});
+    rings.push({id:'c'+cl.ci+','+cl.cj, air:true, kind:'turkey', x, z, y:Math.max(H(x, z) + 2.4, fly), R:2.3, yaw:0});
   }
   drawRings();
 }
@@ -758,7 +867,7 @@ function updateAvalanche(dt){
       _m.compose(_p, _q, _s); avMesh.setMatrixAt(n++, _m);
     }
     // powder blasting off the front of the slide
-    if (P.z - avFront(avT, P.x) < 200 && dt > 0){
+    if (P.z - avFront(avT, P.x) < 200 && dt > 0 && !(state === 'crashed' && crashKind !== 'avalanche')){
       avEmit += 260*dt;
       while (avEmit > 1){
         avEmit -= 1;
@@ -1454,8 +1563,9 @@ function chime(freqs, vol = 0.18){
   });
 }
 function popup(big, small, air){
-  const el = document.createElement('div'); el.className = 'pop' + (air === 'hurt' ? ' hurt' : air ? ' air' : '');
-  el.textContent = big; const sm = document.createElement('small'); sm.textContent = small; el.append(sm);
+  const el = document.createElement('div'); el.className = 'pop' + (air === 'hurt' ? ' hurt' : air === 'berry' ? ' berry' : air ? ' air' : '');
+  el.textContent = big;
+  if (small){ const sm = document.createElement('small'); sm.textContent = small; el.append(sm); }
   $('pops').append(el); setTimeout(() => el.remove(), 1350);
   while ($('pops').children.length > 3) $('pops').firstChild.remove();
 }
@@ -1466,7 +1576,7 @@ function hurtFlash(){
 }
 function hurt(amount, label){          // returns true if this took your last health
   P.score = Math.max(0, P.score - amount);
-  popup('-' + amount, label, 'hurt'); hurtFlash();
+  popup(label, '', 'hurt'); hurtFlash();
   if (P.score <= 0){ crash('health'); return true; }
   return false;
 }
@@ -1479,14 +1589,15 @@ function setMuted(m){
 setMuted(muted);
 
 /* ---------- game state ---------- */
+const BOOST_TIME = 10, BOOST_DRAG = 1/1.44;   // strawberry: drag cut so terminal speed is 20% higher
 const G = 9.8, ACCEL = 1.25, MU = 0.03, DRAG = 0.0028, SKID = 0.4, BLEED = 0.12, JUMP = 8.2, AIR_G = 19, HOLD_MAX = 0.38, HOLD_G = 0.3;
 const P = {};
-let state = 'title', crashT = 0, best = 0, bestPts = 0;
+let state = 'title', crashT = 0, best = 0, bestPts = 0, crashKind = '';
 try { bestPts = +localStorage.getItem('treeline-best-hp') || 0; } catch(e){}
 try { best = +localStorage.getItem('treeline-best') || 0; } catch(e){}
 const cam = {bp:0, roll:0, yaw:0, dip:0, air:0, fov:70, boost:0, hit:0, lean:0, leanKick:0};
 function reset(){
-  Object.assign(P, {x:0, z:0, y:H(0,0), vy:0, gvy:0, lastGvy:0, peak:0, rockCd:0, look:0, holdT:0, holding:false, air:false, v:6, th:0, om:0, top:0, dist:0, score:HP_START, ringsGot:0, time:0, trail:[{x:0, z:0}], run:[{x:0, z:0, air:false}]});
+  Object.assign(P, {x:0, z:0, y:H(0,0), vy:0, gvy:0, lastGvy:0, peak:0, rockCd:0, look:0, holdT:0, holding:false, air:false, v:6, th:0, om:0, top:0, dist:0, score:HP_START, ringsGot:0, berries:0, boostT:0, time:0, trail:[{x:0, z:0}], run:[{x:0, z:0, air:false}]});
   for (let i=0;i<SP;i++){ spLife[i]=0; spPos[i*3+1]=-1e5; }
   terrainKey = ''; obstacleKey = ''; activeKey = ''; collected.clear(); flagKey = ''; finishX = 0;
   refreshCliffs(P.x, P.z);
@@ -1549,7 +1660,7 @@ function flash(o){
 }
 function crash(kind){
   P.run.push({x:P.x, z:P.z, air:P.air});
-  state = 'crashed'; crashT = 0;
+  state = 'crashed'; crashT = 0; crashKind = kind; startMountainView();
   flash(0.85);
   if (kind === 'tree'){ woodKnock(1); thump(0.8); snowDump(1); branchPuff(1); }
   else if (kind === 'rock'){ thump(1.1); if (au){ grain(900, 1.2, 0.6, 0.12); grain(2600, 2, 0.3, 0.06, 0.01); } }
@@ -1558,14 +1669,14 @@ function crash(kind){
   const isBest = dist > best;
   if (isBest){ best = dist; try { localStorage.setItem('treeline-best', String(best)); } catch(e){} }
   lastRun = {kind, dist, top, isBest, score:P.score, ringsGot:P.ringsGot, time:P.time};
-  setTimeout(showEndPanel, 700);
+  setTimeout(showEndPanel, kind === 'avalanche' ? 700 : 2400);   // give the zoom-out time to play
 }
 let lastRun = null;
 function showEndPanel(){
   $('panel').classList.add('end');
   const {kind, dist, top, isBest, score, ringsGot, time} = lastRun;
   const mmss = Math.floor(time/60) + ':' + String(Math.floor(time % 60)).padStart(2, '0');
-  const ringTxt = ringsGot === 1 ? '1 ring collected' : ringsGot + ' rings collected';
+  const ringTxt = ringsGot === 1 ? '1 snack grabbed' : ringsGot + ' snacks grabbed';
   const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
   const bestTxt = kind === 'finish'
     ? (isBest ? 'Most health you have finished with.' : `Best finish: ${bestPts} health.`)
@@ -1597,7 +1708,7 @@ function startReplay(fromT = 0){
   state = 'replay'; repT = fromT; repI = 0; repPrevAir = false; repPeak = 0;
   while (repI < rec.length - 2 && rec[repI+1].t <= repT) repI++;
   const f = rec[repI]; avT = repT;
-  Object.assign(P, {x:f.x, y:f.y, z:f.z, th:f.th, om:f.om, air:f.air, v:f.v, look:f.look, dist:f.z, score:f.sc, trail:[{x:f.x, z:f.z}]});
+  Object.assign(P, {x:f.x, y:f.y, z:f.z, th:f.th, om:f.om, air:f.air, v:f.v, look:f.look, boostT:0, dist:f.z, score:f.sc, trail:[{x:f.x, z:f.z}]});
   collected.clear(); obstacleKey = ''; repPrev.set(f.x, f.y + 0.9, f.z);
   cam.dip = 0; cam.lean = 0; cam.leanKick = 0; cam.hit = 0; cam.bp = Math.atan(-SLOPE);
   rc.yaw = f.th; rc.snap = true;
@@ -1616,7 +1727,7 @@ function replayTick(dt){
   P.th = a.th + (b.th - a.th)*k; P.om = a.om + (b.om - a.om)*k; P.v = a.v + (b.v - a.v)*k; P.look = a.look + (b.look - a.look)*k;
   P.air = k < 0.5 ? a.air : b.air;
   P.dist = Math.max(P.dist, P.z);
-  if (a.sc < P.score){ const d = P.score - a.sc; popup('-' + d, d >= HP_CLIP ? 'Ski clipped a trunk' : 'Branches', 'hurt'); hurtFlash(); }
+  if (a.sc < P.score){ const d = P.score - a.sc; popup(d >= HP_CLIP ? 'Ski clipped a trunk' : 'Branches', '', 'hurt'); hurtFlash(); }
   P.score = a.sc;
   checkRings(repPrev.x, repPrev.y, repPrev.z, P.x, P.y + 0.9, P.z, false); repPrev.set(P.x, P.y + 0.9, P.z);
   // re-create the moments the camera and arms react to
@@ -1643,18 +1754,18 @@ function finishReplay(){        // play the crash again, then back to the end sc
   const f = rec[rec.length-1];
   Object.assign(P, {x:f.x, y:f.y, z:f.z, th:f.th, om:0, air:false, v:lastRun.kind === 'finish' ? f.v : 0, score:lastRun.score});
   if (lastRun.kind === 'finish'){ state = 'finished'; chime([523, 659, 784, 1047], 0.2); }
-  else { state = 'crashed'; crashT = 0; flash(0.85); thump(1); }
+  else { state = 'crashed'; crashT = 0; crashKind = lastRun.kind; startMountainView(); flash(0.85); thump(1); }
   $('hud').classList.remove('replay'); $('rtag').hidden = true; $('hud').hidden = true;
   document.body.classList.remove('replaying');
   if (clip){ clip.tail = 1e-4; return; }                 // keep recording the crash/finish for a moment
-  setTimeout(() => { if (state === 'crashed' || state === 'finished') showEndPanel(); }, 900);
+  setTimeout(() => { if (state === 'crashed' || state === 'finished') showEndPanel(); }, lastRun.kind === 'finish' || lastRun.kind === 'avalanche' ? 900 : 2400);
 }
 function endReplay(){           // skip straight to the end screen
   if (state !== 'replay') return;
   if (clip) cancelClip();
   const f = rec[rec.length-1];
   Object.assign(P, {x:f.x, y:f.y, z:f.z, th:f.th, om:0, air:false, v:0, score:lastRun.score});
-  if (lastRun.kind === 'finish') state = 'finished'; else { state = 'crashed'; crashT = 1; }
+  if (lastRun.kind === 'finish') state = 'finished'; else { state = 'crashed'; crashT = 1; crashKind = lastRun.kind; startMountainView(); mv.t = MV_TIME; }
   showEndPanel();
 }
 $('watch').addEventListener('click', () => startReplay(0));
@@ -1926,6 +2037,7 @@ function emit(side, fx, fz){
 function step(dt){
   const ax0 = P.x, ay0 = P.y, az0 = P.z;
   P.time += dt; avT = P.time;
+  if (P.boostT > 0) P.boostT = Math.max(0, P.boostT - dt);
   if (avT > AV_DELAY && !avAnnounced){ avAnnounced = true; popup('Avalanche!', 'Ski for your life', true); thump(0.6); }
   const input = (keys.l ? 1 : 0) - (keys.r ? 1 : 0);
   // carve radius grows with speed (about 3 m at 5 km/h... 15 m at 50 km/h... 55 m at 110 km/h);
@@ -1946,10 +2058,10 @@ function step(dt){
 
   if (!P.air){
     const grade = gradeAhead(fx, fz);
-    const a = ACCEL*G*grade/Math.sqrt(1+grade*grade) - MU*G - ACCEL*DRAG*P.v*P.v - SKID*fx*fx*P.v - BLEED*Math.abs(P.om)*P.v;
+    const a = ACCEL*G*grade/Math.sqrt(1+grade*grade) - MU*G - ACCEL*DRAG*(P.boostT > 0 ? BOOST_DRAG : 1)*P.v*P.v - SKID*fx*fx*P.v - BLEED*Math.abs(P.om)*P.v;
     P.v = Math.max(0, P.v + a*dt);
   } else {
-    P.v = Math.max(0, P.v - DRAG*P.v*P.v*dt);
+    P.v = Math.max(0, P.v - DRAG*(P.boostT > 0 ? BOOST_DRAG : 1)*P.v*P.v*dt);
   }
   P.x += fx*P.v*dt; P.z += fz*P.v*dt;
 
@@ -2092,19 +2204,24 @@ function step(dt){
 }
 
 function checkRings(ax, ay, az, bx, by, bz, award){
-  // collected when your body crosses the ring's plane inside its hoop
+  // grabbed when your body passes within reach of it
+  const dx = bx - ax, dy = by - ay, dz = bz - az, dd = dx*dx + dy*dy + dz*dz;
   for (const rg of rings){
     if (collected.has(rg.id) || Math.abs(rg.z - bz) > 8 || Math.abs(rg.x - bx) > 8) continue;
-    const nx = Math.sin(rg.yaw), nz = Math.cos(rg.yaw);
-    const d0 = (ax - rg.x)*nx + (az - rg.z)*nz, d1 = (bx - rg.x)*nx + (bz - rg.z)*nz;
-    if ((d0 > 0) === (d1 > 0)) continue;
-    const t = d0/(d0 - d1);
-    const ix = ax + (bx - ax)*t - rg.x, iy = ay + (by - ay)*t - rg.y, iz = az + (bz - az)*t - rg.z;
-    if (ix*ix + iy*iy + iz*iz > (rg.R - 0.1)*(rg.R - 0.1)) continue;
-    collected.add(rg.id); drawRings();
-    const pts = rg.air ? RING_PTS.air : RING_PTS.ground;
-    if (award){ P.score = Math.min(HP_MAX, P.score + pts); P.ringsGot++; }
-    popup('+' + pts, rg.air ? 'Air ring' : 'Ring', rg.air);
+    let t = dd > 1e-9 ? ((rg.x - ax)*dx + (rg.y - ay)*dy + (rg.z - az)*dz)/dd : 0;
+    t = Math.max(0, Math.min(1, t));
+    const ix = ax + dx*t - rg.x, iy = ay + dy*t - rg.y, iz = az + dz*t - rg.z;
+    const reach = rg.R*0.95;
+    if (ix*ix + iy*iy + iz*iz > reach*reach) continue;
+    collected.add(rg.id);
+    const pts = FOOD_PTS[rg.kind];
+    if (rg.kind === 'berry'){
+      if (award){ P.boostT = BOOST_TIME; P.v *= 1.2; P.berries++; }
+      popup(FOOD_NAME.berry, 'Top speed +20%', 'berry');
+    } else {
+      if (award){ P.score = Math.min(HP_MAX, P.score + pts); P.ringsGot++; }
+      popup(FOOD_NAME[rg.kind], '', rg.air);
+    }
     chime(rg.air ? [880, 1175, 1568] : [784, 1047], 0.15);
     landingBurst(4);
   }
@@ -2430,6 +2547,9 @@ function updateHUD(){
     const fill = $('hpfill'); fill.style.width = (100*P.score/HP_MAX) + '%'; fill.className = P.score <= 200 ? 'low' : '';
   }
   if (s !== lastS){ $('spd').textContent = s; lastS = s; }
+  const bo = $('boost'), on = P.boostT > 0;
+  if (bo.hidden === on) bo.hidden = !on;
+  if (on) bo.lastChild.style.width = (100*P.boostT/BOOST_TIME) + '%';
   const av = $('av');
   if (avT <= AV_DELAY){ av.textContent = 'Avalanche in ' + Math.ceil(AV_DELAY - avT) + ' s'; av.className = ''; }
   else {
@@ -2466,6 +2586,67 @@ document.addEventListener('touchend', e => {
 }, {passive:false});
 document.addEventListener('dblclick', e => e.preventDefault());
 
+/* ---------- after a crash: pull back from your eyes to a wide view of the mountain ---------- */
+const MV_TIME = 3.2;
+const mv = {on:false, t:0, p0:new THREE.Vector3(), l0:new THREE.Vector3(), p1:new THREE.Vector3(), l1:new THREE.Vector3()};
+const _mvL = new THREE.Vector3(), _mvD = new THREE.Vector3();
+function startMountainView(){
+  if (crashKind === 'avalanche'){ mv.on = false; return; }   // buried by the slide: stay in the snow
+  rig.updateMatrixWorld(true);
+  camera.getWorldPosition(mv.p0);
+  camera.getWorldDirection(_mvD);
+  mv.l0.copy(mv.p0).addScaledVector(_mvD, 8);
+  // end high above the slope behind you and off to one side, looking down at the crash site and the run below
+  const side = hash(Math.round(P.x), Math.round(P.z)) < 0.5 ? -1 : 1;
+  const ex = P.x + side*8, ez = P.z - 15;           // steep, from high above, so the trees don't hide you
+  mv.p1.set(ex, Math.max(H(ex, ez) + 22, P.y + 27), ez);
+  mv.l1.set(P.x, P.y, P.z + 5);
+  mv.t = 0; mv.on = true;
+}
+function updateMountainView(dt){
+  if (!mv.on) return false;
+  if (state !== 'crashed'){ mv.on = false; return false; }
+  mv.t = Math.min(MV_TIME, mv.t + dt);
+  const hold = 0.45;                                   // see the tree hit from your eyes first
+  const k = Math.max(0, (mv.t - hold)/(MV_TIME - hold));
+  const e = k < 0.5 ? 4*k*k*k : 1 - Math.pow(-2*k + 2, 3)/2;   // ease in-out
+  drone.position.lerpVectors(mv.p0, mv.p1, e);
+  const ey = 1 - Math.pow(1 - k, 3);                   // rise up out of the trees first, then drift back
+  drone.position.y = mv.p0.y + (mv.p1.y - mv.p0.y)*ey;
+  _mvL.lerpVectors(mv.l0, mv.l1, e);
+  drone.lookAt(_mvL);
+  const fov = camera.fov + ((camera.aspect >= 1 ? 55 : 78) - camera.fov)*e;
+  if (Math.abs(drone.fov - fov) > 0.01){ drone.fov = fov; drone.updateProjectionMatrix(); }
+  // you, lying in the snow where you went down
+  groundSkier();
+  skier.position.y -= 0.15;
+  skier.rotation.set(cam.bp, P.th + Math.PI, 1.35);
+  skierKit.setPose('stand');
+  scene.fog.density *= 1 - 0.75*e;
+  if (k > 0) $('hud').hidden = true;                    // the fog thins so the mountain opens up
+  return k > 0;
+}
+
+/* ---------- skis on top: drawn in a second pass so no snow ever lands on them ---------- */
+const OVERLAY = 1;
+scene.traverse(o => { if (o.isLight) o.layers.enable(OVERLAY); });
+function overlayLayers(){
+  feet.traverse(o => o.layers.set(OVERLAY));
+  for (const g of povLegs) for (const m of [g.thigh, g.shin, g.knee]) m.layers.set(OVERLAY);
+}
+function renderPOV(){
+  overlayLayers();
+  camera.layers.set(0);
+  renderer.render(scene, camera);                 // the world: terrain, trees, spray, falling snow
+  const bg = scene.background;
+  scene.background = null; renderer.autoClear = false;
+  renderer.clearDepth();
+  camera.layers.set(OVERLAY);
+  renderer.render(scene, camera);                 // then the skis and legs, always in front of the snow
+  scene.background = bg; renderer.autoClear = true;
+  camera.layers.set(0);
+}
+
 /* ---------- loop ---------- */
 reset(); P.v = 0; resize();
 let last = performance.now();
@@ -2474,7 +2655,7 @@ function frame(now){
   const rawDt = (now - last)/1000, dt = Math.min(0.05, rawDt); last = now; time += dt;
   if (state === 'playing'){ step(dt); recordFrame(dt); }
   else if (state === 'replay') replayTick(Math.min(0.25, rawDt));   // replays follow real time, so clips never come out in slow motion
-  else if (state === 'crashed'){ crashT += dt; avT += dt; }   // the slide keeps rolling over the crash site
+  else if (state === 'crashed'){ crashT += dt; if (crashKind === 'avalanche') avT += dt; }   // hit a tree or rock: the slide stops where it is
   else if (state === 'finished') glide(dt);
   refreshCliffs(P.x, P.z);
   rebuildTerrain(P.x, P.z);
@@ -2488,10 +2669,13 @@ function frame(now){
   updateParticles(dt);
   updateAudio();
   const intro = state === 'title';
-  skier.visible = intro; rig.visible = !intro;
+  const wide = !intro && updateMountainView(dt);
+  skier.visible = intro || wide; rig.visible = !intro && !wide;
   if (intro){ groundSkier(); updateDrone(); }
   else if (state === 'playing' || state === 'replay') updateHUD();
-  renderer.render(scene, intro ? drone : camera);   // replays use the same first-person view as live play
+  drawRings();
+  if (intro || wide) renderer.render(scene, drone);
+  else renderPOV();                               // replays use the same first-person view as live play
   if (clip) drawClipFrame(dt);
   if (state === 'playing') renderRear();          // no inset windows during a replay
   requestAnimationFrame(frame);
@@ -2499,5 +2683,7 @@ function frame(now){
 requestAnimationFrame(frame);
 })();
 </script>
+<script data-goatcounter="https://goohaoyu.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
 </body>
 </html>
