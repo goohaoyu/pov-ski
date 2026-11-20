@@ -156,6 +156,18 @@ kbd{font:inherit;font-weight:600;border:1.5px solid var(--ink);border-radius:4px
 #pick{margin:0 0 .45rem;font-size:1.05rem;font-weight:600;color:var(--ink-soft)}
 .outfits{display:flex;gap:.5rem;margin:0 0 1.2rem;flex-wrap:wrap}
 .actions{display:flex;flex-wrap:wrap;gap:.5rem}
+#updates{margin:1.3rem 0 0;width:100%;max-width:26rem;padding:.8rem .9rem .7rem;border-radius:10px;background:rgba(238,243,246,.72);text-align:left}
+#updates[hidden]{display:none}
+#updates .uphead{margin:0;font-weight:700;font-size:1.45rem;line-height:1.05}
+#updates .upsub{margin:.15rem 0 .55rem;font-weight:500;font-size:1.05rem;color:var(--ink-soft)}
+#updates .uprow{display:flex;gap:.4rem}
+#upemail{flex:1 1 auto;min-width:0;font:500 1.1rem "Barlow Condensed",sans-serif;color:var(--ink);background:#fff;border:1px solid rgba(28,37,48,.25);border-radius:6px;padding:.45rem .6rem}
+#upemail:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+#upgo{flex:0 0 auto;font:600 1.15rem "Barlow Condensed",sans-serif;color:var(--ink);background:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:.4rem .85rem;cursor:pointer}
+#upgo:disabled{opacity:.6;cursor:default}
+#upmsg{margin:.45rem 0 0;font-weight:500;font-size:1.05rem;min-height:1.2em}
+#upmsg:empty{display:none}
+#updates.done .uprow,#updates.done .upsub{display:none}
 .actions #watch,.actions #share{margin-left:0}
 /* end screen: everything centred */
 #panel.end{align-items:center;
@@ -239,7 +251,7 @@ kbd{font:inherit;font-weight:600;border:1.5px solid var(--ink);border-radius:4px
   <div class="inner">
     <h1 id="ptitle">POV Ski</h1>
     <canvas id="runmap" hidden aria-label="Map of your run"></canvas>
-    <p id="pbody">Ski 5,000 m through the trees in thick fog. You start with 200 health: brushing branches costs 5, clipping a trunk with your ski tips costs 200, and hitting a trunk ends the run. Grab the floating drumsticks, tomahawk steaks and roast turkeys to heal, up to 1,000. Turkeys hang high, so jump for them. Strawberries raise your top speed by 20% for 10 seconds.</p>
+    <p id="pbody">5,000 m of trees. Outrun the avalanche.</p>
     <dl class="keys" id="keys">
       <dt class="desk"><kbd>←</kbd><kbd>→</kbd></dt><dd class="desk">Turn your skis</dd>
       <dt class="desk"><kbd>Space</kbd></dt><dd class="desk">Tap to jump, hold to jump higher</dd>
@@ -251,6 +263,15 @@ kbd{font:inherit;font-weight:600;border:1.5px solid var(--ink);border-radius:4px
     <div class="outfits" id="outfits" role="group" aria-label="Choose your skier"></div>
     <div class="actions"><button id="go">Start run</button><button id="watch" type="button" hidden>Watch replay</button><button id="share" type="button" hidden>Share clip</button></div>
     <p id="phint" class="desk">or press Space</p>
+    <form id="updates" hidden novalidate>
+      <p class="uphead">Get updates</p>
+      <p class="upsub">New features, new runs, leaderboards. No spam.</p>
+      <div class="uprow">
+        <input id="upemail" type="email" name="email_address" autocomplete="email" inputmode="email" placeholder="you@email.com" aria-label="Your email address" required>
+        <button id="upgo" type="submit">Sign me up</button>
+      </div>
+      <p id="upmsg" role="status"></p>
+    </form>
   </div>
 </section>
 
@@ -1627,6 +1648,7 @@ const keys = {l:false, r:false};
 let jumpQueued = false, jumpHeld = false;
 addEventListener('keydown', e => {
   if (!$('clipbox').hidden){ if (e.code === 'Escape') closeClipBox(); return; }
+  if (e.target && e.target.id === 'upemail') return;     // typing an email: no game keys
   if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.l = true;
   if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.r = true;
   if (e.code === 'KeyM' && !e.repeat){ initAudio(); setMuted(!muted); }
@@ -1692,6 +1714,7 @@ function crash(kind){
 let lastRun = null;
 function showEndPanel(){
   $('panel').classList.add('end');
+  showUpdates();
   const {kind, dist, top, isBest, score, ringsGot, time} = lastRun;
   const mmss = Math.floor(time/60) + ':' + String(Math.floor(time % 60)).padStart(2, '0');
   const ringTxt = ringsGot === 1 ? '1 snack grabbed' : ringsGot + ' snacks grabbed';
@@ -1801,6 +1824,40 @@ function trackDistance(kind, dist){
   const pad = n => String(n).padStart(4, '0');
   track(`distance-${pad(lo)}-${pad(hi)}m`, `Run ended at ${lo.toLocaleString()}–${hi.toLocaleString()} m`);
 }
+
+/* ---------- Get updates: email signups go to the POV Ski list in Kit ---------- */
+const KIT_FORM = 'https://app.kit.com/forms/10218106/subscriptions';
+const UPD_KEY = 'povski-updates';
+function showUpdates(){
+  let done = false; try { done = localStorage.getItem(UPD_KEY) === '1'; } catch(e){}
+  $('updates').hidden = done;                 // signed up already: don't ask again
+}
+$('updates').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = $('updates'), em = $('upemail'), msg = $('upmsg'), btn = $('upgo');
+  const email = em.value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){ msg.textContent = 'That email doesn\'t look right. Check it and try again.'; em.focus(); return; }
+  btn.disabled = true; msg.textContent = 'Signing you up…';
+  const body = new URLSearchParams({email_address: email});
+  let ok = false;
+  try {
+    const r = await fetch(KIT_FORM, {method:'POST', body, headers:{Accept:'application/json'}});
+    let j = null; try { j = await r.json(); } catch(_){}
+    ok = r.ok && (!j || j.status !== 'failed');
+  } catch(err){
+    // Kit didn't allow reading the reply from this site: send it anyway, without reading the answer
+    try { await fetch(KIT_FORM, {method:'POST', body, mode:'no-cors'}); ok = true; } catch(_){ ok = false; }
+  }
+  btn.disabled = false;
+  if (ok){
+    try { localStorage.setItem(UPD_KEY, '1'); } catch(_){}
+    f.classList.add('done');
+    msg.textContent = 'You\'re on the list. Check your inbox and tap the link to confirm.';
+    track('updates-signup', 'Signed up for updates');
+  } else {
+    msg.textContent = 'Couldn\'t sign you up just now. Check your connection and try again.';
+  }
+});
 
 /* ---------- share a clip: the last 10 seconds re-rendered into a video, with the link burned in ---------- */
 const GAME_URL = 'https://gu-project.com/pov-ski';
