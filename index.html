@@ -1291,11 +1291,12 @@ const rig = new THREE.Group(); rig.rotation.order = 'YXZ'; scene.add(rig);
 rig.add(camera);
 const pov = SkierKit.createPOVRig();
 // wrap each kit ski so turns can yaw/roll it; shifted forward so the tips sit where they did before
+const SKI_Z = -0.3;
 const [povSkiR, povSkiL] = pov.parts.skis.map(holder => {
-  const w = new THREE.Group(); w.position.set(holder.position.x, 0, -0.3); holder.position.x = 0; w.add(holder);
+  const w = new THREE.Group(); w.position.set(holder.position.x, 0, SKI_Z); holder.position.x = 0; w.add(holder);
   const ski = holder.children[0], ankle = ski.children[ski.children.length - 1];
   ankle.remove(ankle.children[ankle.children.length - 1]);   // drop the kit's stand-alone shin; full legs are built below
-  w.userData.ankle = ankle;
+  w.userData.ankle = ankle; w.userData.x0 = w.position.x;
   return w;
 });
 const skiL = povSkiL, skiR = povSkiR;
@@ -1595,7 +1596,7 @@ const P = {};
 let state = 'title', crashT = 0, best = 0, bestPts = 0, crashKind = '';
 try { bestPts = +localStorage.getItem('treeline-best-hp') || 0; } catch(e){}
 try { best = +localStorage.getItem('treeline-best') || 0; } catch(e){}
-const cam = {bp:0, roll:0, yaw:0, dip:0, air:0, fov:70, boost:0, hit:0, lean:0, leanKick:0};
+const cam = {bp:0, roll:0, yaw:0, dip:0, air:0, fov:70, boost:0, hit:0, lean:0, leanKick:0, skiTurn:0};
 function reset(){
   Object.assign(P, {x:0, z:0, y:H(0,0), vy:0, gvy:0, lastGvy:0, peak:0, rockCd:0, look:0, holdT:0, holding:false, air:false, v:6, th:0, om:0, top:0, dist:0, score:HP_START, ringsGot:0, berries:0, boostT:0, time:0, trail:[{x:0, z:0}], run:[{x:0, z:0, air:false}]});
   for (let i=0;i<SP;i++){ spLife[i]=0; spPos[i*3+1]=-1e5; }
@@ -2243,7 +2244,7 @@ function glide(dt){          // after the finish line, coast to a stop
 }
 
 /* ---------- first-person camera: never constant ---------- */
-let fovBase = 66, time = 0;
+let fovBase = 66, pitchFit = 0, time = 0;
 function updateCamera(dt){
   const spd = Math.min(1, P.v/32);
   const fx = Math.sin(P.th), fz = Math.cos(P.th);
@@ -2282,7 +2283,7 @@ function updateCamera(dt){
   let eye = 1.6 - 0.24*spd - cam.dip + bob;
   cam.lean += (cam.leanKick - cam.lean) * Math.min(1, dt*12);   // snap back quickly...
   cam.leanKick *= Math.exp(-dt*2.5);                             // ...then recover forward
-  let pitch = -(0.36 - 0.12*spd) + cam.air + cam.boost*0.08 + cam.lean*(reduceMotion ? 0.5 : 1);
+  let pitch = -(0.36 - 0.12*spd) + pitchFit + cam.air + cam.boost*0.08 + cam.lean*(reduceMotion ? 0.5 : 1);
   let roll = cam.roll;
   if (state === 'crashed'){
     const k = Math.min(1, crashT/0.5), e = 1 - (1-k)*(1-k);
@@ -2291,12 +2292,23 @@ function updateCamera(dt){
   camera.position.set(0, eye, 0.12);
   camera.rotation.set(pitch + sy, cam.yaw + P.look + sx, roll);
 
-  const target = Math.min(112, fovBase + 20*spd);
+  const target = Math.min(105, 2*Math.atan(Math.tan(fovBase/2*Math.PI/180)*(1 + 0.15*spd))*180/Math.PI);   // widen with speed, gently
   cam.fov += (target - cam.fov) * Math.min(1, dt*3);
   if (Math.abs(camera.fov - cam.fov) > 0.01){ camera.fov = cam.fov; camera.updateProjectionMatrix(); }
 
   const skiPitch = P.air ? 0.08 : 0;
-  for (const s of [skiL, skiR]) s.rotation.set(skiPitch, P.om*0.1, P.om*0.12);
+  // turning: the skis swing across the fall line and roll up on their edges; the inside ski leads a little
+  cam.skiTurn += (P.om - cam.skiTurn)*Math.min(1, dt*7);
+  const tr = cam.skiTurn;
+  const yaw = Math.max(-0.6, Math.min(0.6, tr*0.34));      // up to ~34 degrees across
+  // edge angle builds with speed: a gentle tilt when slow, up to ~27 degrees when fast
+  const edge = Math.max(-0.47, Math.min(0.47, tr*0.3)) * (0.3 + 0.7*spd);
+  const lead = Math.max(-0.12, Math.min(0.12, tr*0.08));   // + turning left: left ski a little ahead
+  for (const s of [skiL, skiR]) s.rotation.set(skiPitch, yaw, edge);
+  skiL.position.z = SKI_Z - lead*0.5; skiR.position.z = SKI_Z + lead*0.5;
+  const spread = 0.07*spd;                                 // a wider, steadier stance at speed
+  skiL.position.x = skiL.userData.x0 - spread; skiR.position.x = skiR.userData.x0 + spread;
+  skiL.position.y = skiR.position.y = Math.abs(edge)*0.04;   // ride up onto the edge instead of sinking the uphill side
   updateHands(dt, spd, rm);
   rig.updateMatrixWorld();
   updatePOVLimbs();
@@ -2559,6 +2571,18 @@ function updateHUD(){
 }
 
 let viewW = 1, viewH = 1;
+// Vertical field of view for a screen shape. Designed at 66 degrees for 4:3 to 16:9. On wider screens
+// (ultrawide monitors, phones held sideways) the horizontal view is held at the 16:9 width instead of
+// stretching, so the picture never looks smeared out; on tall screens (phones upright) the view
+// gets taller so you still see enough of the slope from side to side (capped so trees don't stretch).
+const DEG = Math.PI/180, WIDE = 16/9;
+function fitFov(v, a){
+  const t = Math.tan(v/2*DEG);
+  if (a > WIDE) return Math.max(62, 2*Math.atan(t*WIDE/a)/DEG);   // keep enough height to see skis and trees
+  if (a < 1.2) return Math.min(90, 2*Math.atan(Math.tan(38*DEG)/Math.max(a, 0.4))/DEG);
+  return v;
+}
+const droneFov = a => a >= 1 ? fitFov(55, a) : 78;
 function resize(){
   // the canvas fills the screen through CSS; size the renderer to what it actually covers
   const w = Math.max(1, canvas.clientWidth || innerWidth), h = Math.max(1, canvas.clientHeight || innerHeight), a = w/h;
@@ -2566,9 +2590,10 @@ function resize(){
   renderer.setSize(w, h, false);
   renderer.setViewport(0, 0, w, h);
   camera.aspect = a; drone.aspect = a;
-  fovBase = a >= 1.2 ? 66 : Math.min(100, 2*Math.atan(Math.tan(38*Math.PI/180)/Math.max(a, 0.4))*180/Math.PI);
+  fovBase = fitFov(66, a);
+  pitchFit = fovBase < 66 ? -(66 - fovBase)*DEG*0.3 : 0;   // a shorter view tips down a little to keep the skis in frame
   cam.fov = fovBase; camera.fov = fovBase;
-  drone.fov = a >= 1 ? 55 : 78;
+  drone.fov = droneFov(a);
   camera.updateProjectionMatrix(); drone.updateProjectionMatrix();
 }
 addEventListener('resize', resize);
@@ -2615,7 +2640,7 @@ function updateMountainView(dt){
   drone.position.y = mv.p0.y + (mv.p1.y - mv.p0.y)*ey;
   _mvL.lerpVectors(mv.l0, mv.l1, e);
   drone.lookAt(_mvL);
-  const fov = camera.fov + ((camera.aspect >= 1 ? 55 : 78) - camera.fov)*e;
+  const fov = camera.fov + (droneFov(camera.aspect) - camera.fov)*e;
   if (Math.abs(drone.fov - fov) > 0.01){ drone.fov = fov; drone.updateProjectionMatrix(); }
   // you, lying in the snow where you went down
   groundSkier();
