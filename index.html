@@ -2352,7 +2352,7 @@ function updateCamera(dt){
 
   const target = Math.min(105, 2*Math.atan(Math.tan(fovBase/2*Math.PI/180)*(1 + 0.15*spd))*180/Math.PI);   // widen with speed, gently
   cam.fov += (target - cam.fov) * Math.min(1, dt*3);
-  if (Math.abs(camera.fov - cam.fov) > 0.01){ camera.fov = cam.fov; camera.updateProjectionMatrix(); }
+  applyCamProjection(false);
 
   const skiPitch = P.air ? 0.08 : 0;
   // turning: the skis swing across the fall line and roll up on their edges; the inside ski leads a little
@@ -2641,18 +2641,48 @@ function fitFov(v, a){
   return v;
 }
 const droneFov = a => a >= 1 ? fitFov(55, a) : 78;
+let lensD = 0, projT = -1;
+// Half-height of the visible window, in tan units. Wider than 16:9: keep roughly the 16:9 width, but don't let
+// the view get so short that there's no room for the skis.
+const winHalf = (t, a) => a > WIDE ? t*Math.max(WIDE/a, 0.9) : t;
+const MAX_A = 2.2;   // wider windows than this get plain side margins, so the view is never squashed flat
+function applyCamProjection(force){
+  const a = viewW/viewH, t = winHalf(Math.tan(cam.fov/2*DEG), a);
+  if (!force && Math.abs(t - projT) < 1e-4) return;
+  projT = t;
+  const Hh = t + lensD;                              // half-height of the full (centred) frame the window sits in
+  camera.fov = 2*Math.atan(Hh)/DEG;
+  camera.aspect = t*a/Hh;
+  if (lensD > 0){
+    const fullH = viewH*Hh/t;
+    camera.setViewOffset(viewW, fullH, 0, fullH - viewH, viewW, viewH);   // the window is the bottom of the frame
+  } else camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+}
 function resize(){
-  // the canvas fills the screen through CSS; size the renderer to what it actually covers
+  // very wide, short windows (ultrawide monitors, a game embedded in a short strip): keep the game at
+  // 2.2:1 at most and center it, with the foggy background showing at the sides
+  const W = innerWidth, Hs = innerHeight;
+  if (W/Hs > MAX_A){
+    const cw = Math.round(Hs*MAX_A);
+    canvas.style.width = cw + 'px'; canvas.style.left = Math.round((W - cw)/2) + 'px'; canvas.style.right = 'auto';
+  } else { canvas.style.width = ''; canvas.style.left = ''; canvas.style.right = ''; }
+  // the canvas fills its area through CSS; size the renderer to what it actually covers
   const w = Math.max(1, canvas.clientWidth || innerWidth), h = Math.max(1, canvas.clientHeight || innerHeight), a = w/h;
   viewW = w; viewH = h;
   renderer.setSize(w, h, false);
   renderer.setViewport(0, 0, w, h);
-  camera.aspect = a; drone.aspect = a;
+  drone.aspect = a;
   fovBase = fitFov(66, a);
-  pitchFit = fovBase < 66 ? -(66 - fovBase)*DEG*0.3 : 0;   // a shorter view tips down a little to keep the skis in frame
-  cam.fov = fovBase; camera.fov = fovBase;
+  pitchFit = 0;
+  cam.fov = fovBase;
   drone.fov = droneFov(a);
-  camera.updateProjectionMatrix(); drone.updateProjectionMatrix();
+  // Landscape screens: shift the picture down (like a camera's lens shift, so trees stay upright) so the
+  // skis are in view, while keeping a strip of the slope ahead at the top.
+  const t = winHalf(Math.tan(fovBase/2*DEG), a);
+  lensD = a >= 1.2 ? Math.max(0, Math.min(0.8 - t, t - 0.32)) : 0;
+  applyCamProjection(true);
+  drone.updateProjectionMatrix();
 }
 addEventListener('resize', resize);
 if (window.visualViewport) visualViewport.addEventListener('resize', resize);
@@ -2684,7 +2714,7 @@ function startMountainView(){
   const ex = P.x + side*8, ez = P.z - 15;           // steep, from high above, so the trees don't hide you
   mv.p1.set(ex, Math.max(H(ex, ez) + 22, P.y + 27), ez);
   mv.l1.set(P.x, P.y, P.z + 5);
-  mv.t = 0; mv.on = true;
+  mv.f0 = cam.fov; mv.t = 0; mv.on = true;
 }
 function updateMountainView(dt){
   if (!mv.on) return false;
@@ -2698,7 +2728,7 @@ function updateMountainView(dt){
   drone.position.y = mv.p0.y + (mv.p1.y - mv.p0.y)*ey;
   _mvL.lerpVectors(mv.l0, mv.l1, e);
   drone.lookAt(_mvL);
-  const fov = camera.fov + (droneFov(camera.aspect) - camera.fov)*e;
+  const fov = mv.f0 + (droneFov(viewW/viewH) - mv.f0)*e;
   if (Math.abs(drone.fov - fov) > 0.01){ drone.fov = fov; drone.updateProjectionMatrix(); }
   // you, lying in the snow where you went down
   groundSkier();
