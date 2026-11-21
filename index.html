@@ -855,8 +855,10 @@ function updateFinish(){
 // Released 3 s after you drop in at 60 km/h, gaining 10 km/h for every 1,000 m it travels.
 // Speed grows with distance (v = A + B*z), so its position is z = (A/B)(e^(B*t) - 1).
 const AV_DELAY = 3, AV_A = 60/3.6, AV_B = (10/3.6)/1000;
-const avTravel = t => t <= 0 ? t*AV_A : (AV_A/AV_B)*(Math.exp(AV_B*t) - 1);
-const avSpeedAt = t => AV_A + AV_B*Math.max(0, avTravel(t));   // m/s
+// it speeds up 10 km/h per 1,000 m until it reaches its top speed of 95 km/h (at 3,500 m), then holds there
+const AV_MAX = 95/3.6, AV_TS = Math.log(AV_MAX/AV_A)/AV_B, AV_DS = (AV_MAX - AV_A)/AV_B;
+const avTravel = t => t <= 0 ? t*AV_A : t < AV_TS ? (AV_A/AV_B)*(Math.exp(AV_B*t) - 1) : AV_DS + AV_MAX*(t - AV_TS);
+const avSpeedAt = t => Math.min(AV_MAX, AV_A + AV_B*Math.max(0, avTravel(t)));   // m/s
 let avT = 0, avAnnounced = false;
 function avFront(t, x){   // z of the avalanche's leading edge (a little ragged across the slope)
   const z = avTravel(t - AV_DELAY) + 2.5*Math.sin(x*0.06 + t*0.7) + 1.5*Math.sin(x*0.17 - t*1.3);
