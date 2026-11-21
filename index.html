@@ -34,6 +34,9 @@
 :root[data-theme="dark"]{ --fog:#c8d2d9; --snow:#eef3f6; --ink:#1c2530; --ink-soft:rgba(28,37,48,.66); --accent:#e8c21f; --veil:rgba(200,210,217,.94); }
 *,*::before,*::after{box-sizing:inherit}
 html,body{height:100%;margin:0;overflow:hidden}
+html{background:var(--fog)}
+/* wide screens: everything lives in a centered column (transform makes it the box for all fixed-position parts) */
+body.boxed{width:var(--gw);margin:0 auto;position:relative;transform:translateZ(0)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{background:var(--fog);color:var(--ink);font-family:"Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;
   -webkit-user-select:none;user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
@@ -112,11 +115,14 @@ body:has(#panel:not([hidden])) #touch{display:none}   /* or behind the start and
     font:600 1.15rem "Barlow Condensed",sans-serif;color:var(--ink)}
 }
 
-#panel{position:fixed;inset:0;display:flex;flex-direction:column;align-items:flex-start;overflow-y:auto;touch-action:pan-y;z-index:5;
+#panel{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;overflow-y:auto;touch-action:pan-y;z-index:5;
   padding:24px 24px calc(env(safe-area-inset-bottom,0px) + 32px);
   background:linear-gradient(to top,var(--veil) 0%,rgba(200,210,217,.75) 32%,rgba(200,210,217,0) 62%)}
 #panel[hidden]{display:none}
-.inner{max-width:32rem;margin-top:auto}   /* sits at the bottom, scrolls if the screen is short */
+.inner{max-width:32rem;margin-top:auto;text-align:center;display:flex;flex-direction:column;align-items:center}   /* centred, at the bottom; scrolls if the screen is short */
+#pbody{margin-left:auto;margin-right:auto}
+.outfits,.actions{justify-content:center}
+.keys{justify-content:center;text-align:left}
 #ptitle{font-weight:700;font-size:clamp(4rem,15vw,8.5rem);line-height:.84;letter-spacing:-.01em;margin:0 0 .6rem}
 #pbody{font-weight:500;font-size:1.3rem;line-height:1.3;margin:0 0 1.1rem;max-width:28rem}
 .keys{display:grid;grid-template-columns:max-content 1fr;gap:.35rem .9rem;margin:0 0 1.4rem;font-size:1.15rem;font-weight:500}
@@ -2645,7 +2651,7 @@ let lensD = 0, projT = -1;
 // Half-height of the visible window, in tan units. Wider than 16:9: keep roughly the 16:9 width, but don't let
 // the view get so short that there's no room for the skis.
 const winHalf = (t, a) => t;   // the view is always as tall as on a 16:9 screen
-const MAX_A = 2.0;   // wider windows than 2:1 get plain side margins, so the view never gets shorter
+const MAX_A = 1.0;   // wider than square: the game stays square in the middle, with plain margins at the sides
 function applyCamProjection(force){
   const a = viewW/viewH, t = winHalf(Math.tan(cam.fov/2*DEG), a);
   if (!force && Math.abs(t - projT) < 1e-4) return;
@@ -2660,13 +2666,12 @@ function applyCamProjection(force){
   camera.updateProjectionMatrix();
 }
 function resize(){
-  // very wide, short windows (ultrawide monitors, a game embedded in a short strip): keep the game at
-  // 2:1 at most and center it, with the foggy background showing at the sides
+  // Screens wider than the game's shape (1:1): the whole game (view, stats, menus) sits in a centered
+  // square-ish column, with the foggy background as margins on both sides
   const W = innerWidth, Hs = innerHeight;
-  if (W/Hs > MAX_A){
-    const cw = Math.round(Hs*MAX_A);
-    canvas.style.width = cw + 'px'; canvas.style.left = Math.round((W - cw)/2) + 'px'; canvas.style.right = 'auto';
-  } else { canvas.style.width = ''; canvas.style.left = ''; canvas.style.right = ''; }
+  const boxed = W/Hs > MAX_A;
+  document.body.classList.toggle('boxed', boxed);
+  document.body.style.setProperty('--gw', boxed ? Math.round(Hs*MAX_A) + 'px' : '100%');
   // the canvas fills its area through CSS; size the renderer to what it actually covers
   const w = Math.max(1, canvas.clientWidth || innerWidth), h = Math.max(1, canvas.clientHeight || innerHeight), a = w/h;
   viewW = w; viewH = h;
