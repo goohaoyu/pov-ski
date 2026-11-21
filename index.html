@@ -2644,8 +2644,8 @@ const droneFov = a => a >= 1 ? fitFov(55, a) : 78;
 let lensD = 0, projT = -1;
 // Half-height of the visible window, in tan units. Wider than 16:9: keep roughly the 16:9 width, but don't let
 // the view get so short that there's no room for the skis.
-const winHalf = (t, a) => a > WIDE ? t*Math.max(WIDE/a, 0.9) : t;
-const MAX_A = 2.2;   // wider windows than this get plain side margins, so the view is never squashed flat
+const winHalf = (t, a) => t;   // the view is always as tall as on a 16:9 screen
+const MAX_A = 2.0;   // wider windows than 2:1 get plain side margins, so the view never gets shorter
 function applyCamProjection(force){
   const a = viewW/viewH, t = winHalf(Math.tan(cam.fov/2*DEG), a);
   if (!force && Math.abs(t - projT) < 1e-4) return;
@@ -2661,7 +2661,7 @@ function applyCamProjection(force){
 }
 function resize(){
   // very wide, short windows (ultrawide monitors, a game embedded in a short strip): keep the game at
-  // 2.2:1 at most and center it, with the foggy background showing at the sides
+  // 2:1 at most and center it, with the foggy background showing at the sides
   const W = innerWidth, Hs = innerHeight;
   if (W/Hs > MAX_A){
     const cw = Math.round(Hs*MAX_A);
